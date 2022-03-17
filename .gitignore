@@ -2,3 +2,4 @@ logs
 venv
 features_test.py
 .idea
+.pyc
