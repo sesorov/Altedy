@@ -3,6 +3,3 @@ requests
 python-telegram-bot
 python-telegram-bot[socks]
 pymongo
-
-# SDL
-bandit

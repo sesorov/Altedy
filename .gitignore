@@ -3,3 +3,7 @@ venv
 features_test.py
 .idea
 .pyc
+configs/token
+configs/bot_config.json
+database/database_config.json
+**/__pycache__/**
