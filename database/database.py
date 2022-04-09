@@ -1,24 +1,123 @@
 import sys
 import time
+import json
 import pymongo
 
+from pathlib import Path
+
 from configs.logger_conf import configure_logger
+from common.helper import UserStatus
+from configs.bot_conf import ConfigException
 
 LOGGER = configure_logger(__name__)
 
 
 class Database:
     """
-    Handler class for MongoDB
+    General wrapper class for MongoDB default methods
     """
 
-    DATABASE_URL = "localhost:27017"
-    DATABASE = "altedy"
-    DB_COLLECTION = "users"
+    def __init__(self, url, db_name, default_collection=None):
+        self.client = pymongo.MongoClient(url)
+        self.db_name = db_name
+        self.default_collection = default_collection
+
+    def upload(self, primary_key, data, collection_name=None):
+        """
+        Upload/update data in MongoDB
+        :param collection_name: Name of db collection to upload info in
+        :param primary_key: For updating data
+        :param data: Data to be uploaded
+        :return: None
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        collection.replace_one(primary_key, data, upsert=True)
+        LOGGER.info(f"Uploaded data to MongoDB: {primary_key}")
+
+    def aggregate(self, aggregation: list, collection_name=None):
+        """
+        Aggregate info from MongoDB
+        :param collection_name:
+        :param aggregation:
+        :return: list
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        return list(collection.aggregate(aggregation))
+
+    def find(self, collection_name=None, query=None):
+        """
+        Find info by query. Leave query empty if need to extract all data
+        :param collection_name:
+        :param query:
+        :return: list
+        """
+
+        if query is None:
+            query = {}
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        return list(collection.find(query))
+
+    def find_one(self, collection_name=None, query=None):
+        """
+        Find only one exact record by query. Leave query empty if need to extract all data
+        :param collection_name:
+        :param query:
+        :return: dict
+        """
+
+        if query is None:
+            query = {}
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        return collection.find_one(query)
+
+    def update(self, user_id, info: dict, collection_name=None):
+        """
+        Update user information on MongoDB
+        :param user_id: users's telegram id
+        :param info: dict containing info for update
+        :return: None
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        collection.update_one({"user_id": user_id}, {"$set": info}, upsert=True)
+
+
+class UserDatabase(Database):
+    """
+    Handler class for users actions in DB
+    """
+
+    _default_file_path = Path(__file__).resolve().parent / "database_config.json"
 
     def __init__(self):
-        self.client = pymongo.MongoClient(self.DATABASE_URL)
-        self.collection = self.client[self.DATABASE][self.DB_COLLECTION]
+        self._data = self._load_from_json()["users"]
+        super().__init__(url=self._data["url"], db_name=self._data["db_name"], default_collection=self._data["collection"])
+
+    def _load_from_json(self) -> dict:
+        try:
+            with open(self._default_file_path, encoding="utf-8") as cfg_file:
+                return json.load(cfg_file)
+        except IOError as err:
+            raise ConfigException(f"Cannot open file '{self._default_file_path}'") from err
 
     def get_users(self, user_type=None):
         """
@@ -26,45 +125,83 @@ class Database:
         :param user_type: str students/teachers/None=all
         :return: list
         """
+
         if user_type == "students":
-            students = list(self.collection.aggregate([
+            students = self.aggregate([
                 {
                     "$match": {'type': 'student'}
                 }
-            ]))
+            ])
             if students:
                 LOGGER.info(f"Successfully got {len(students)} students info.")
             else:
-                LOGGER.warning(f"No students found in {self.DATABASE}.{self.DB_COLLECTION}")
+                LOGGER.warning(f"No students found in {self.db_name}.{self.default_collection}")
             return students
         elif user_type == "teachers":
-            teachers = list(self.collection.aggregate([
+            teachers = self.aggregate([
                 {
                     "$match": {'type': 'teacher'}
                 }
-            ]))
+            ])
             if teachers:
                 LOGGER.info(f"Successfully got {len(teachers)} teachers info.")
             else:
-                LOGGER.warning(f"No teachers found in {self.DATABASE}.{self.DB_COLLECTION}")
+                LOGGER.warning(f"No teachers found in {self.db_name}.{self.default_collection}")
             return teachers
         else:
-            users = list(self.collection.find({}))
+            users = list(self.find({}))
             if users:
                 LOGGER.info(f"Successfully got {len(users)} users info.")
             else:
-                LOGGER.warning(f"No users found in {self.DATABASE}.{self.DB_COLLECTION}")
+                LOGGER.warning(f"No users found in {self.db_name}.{self.default_collection}")
             return users
 
-    def upload(self, primary_key, data):
+    def get_type(self, user_id):
         """
-        Upload/update data in MongoDB
-        :param primary_key: For updating data
-        :param data: Data to be uploaded
+        Get user type: student or teacher
+        :param user_id:
+        :return:
+        """
+
+        return self.find_one({"user_id": user_id})["type"]
+
+    def get_status(self, user_id) -> UserStatus:
+        """
+        Get user status in chat (from common.helper.UserStatus)
+
+        :return: UserStatus
+        """
+
+        return UserStatus(self.find_one({"user_id": user_id})["status"])
+
+    def set_status(self, user_id, status: UserStatus):
+        """
+        Set user status in chat (from common.helper.UserStatus)
+        :param user_id:
+        :param status:
+        :return:
+        """
+
+        self.update(user_id, {"status": status.value})
+
+    def add_raw(self, user_id, additional: dict = None):
+        """
+        Add record for not yet registered user
+
+        :param user_id: int
+        :param additional: any other parameters
         :return: None
         """
-        self.collection.replace_one(primary_key, data, upsert=True)
-        LOGGER.info(f"Uploaded data to MongoDB: {primary_key}")
+
+        if additional is None:
+            additional = {}
+
+        if additional.get("status", None) is None:
+            additional["status"] = UserStatus.REGISTRATION.value
+
+        info = {**{"user_id": user_id}, **additional}
+
+        self.upload({"user_id": user_id}, info)
 
 
 class User:
@@ -73,7 +210,7 @@ class User:
         self.first_name = first_name
         self.surname = surname,
         self.username = username
-        self.db: Database = Database()
+        self.db: UserDatabase = UserDatabase()
 
     def __str__(self):
         """
