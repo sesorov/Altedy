@@ -12,6 +12,14 @@ from configs.bot_conf import ConfigException
 LOGGER = configure_logger(__name__)
 
 
+def _load_from_json(_path) -> dict:
+    try:
+        with open(_path, encoding="utf-8") as cfg_file:
+            return json.load(cfg_file)
+    except IOError as err:
+        raise ConfigException(f"Cannot open file '{_path}'") from err
+
+
 class Database:
     """
     General wrapper class for MongoDB default methods
@@ -69,7 +77,7 @@ class Database:
         collection = self.client[self.db_name][collection_name]
         return list(collection.find(query))
 
-    def find_one(self, collection_name=None, query=None):
+    def find_one(self, query=None, collection_name: str = None):
         """
         Find only one exact record by query. Leave query empty if need to extract all data
         :param collection_name:
@@ -89,6 +97,7 @@ class Database:
     def update(self, user_id, info: dict, collection_name=None):
         """
         Update user information on MongoDB
+        :param collection_name:
         :param user_id: users's telegram id
         :param info: dict containing info for update
         :return: None
@@ -106,18 +115,12 @@ class UserDatabase(Database):
     Handler class for users actions in DB
     """
 
-    _default_file_path = Path(__file__).resolve().parent / "database_config.json"
+    _default_file_path = Path(__file__).resolve().parent.parent / "configs" / "database_config.json"
 
     def __init__(self):
-        self._data = self._load_from_json()["users"]
-        super().__init__(url=self._data["url"], db_name=self._data["db_name"], default_collection=self._data["collection"])
-
-    def _load_from_json(self) -> dict:
-        try:
-            with open(self._default_file_path, encoding="utf-8") as cfg_file:
-                return json.load(cfg_file)
-        except IOError as err:
-            raise ConfigException(f"Cannot open file '{self._default_file_path}'") from err
+        self._data = _load_from_json(self._default_file_path)["users"]
+        super().__init__(url=self._data["url"], db_name=self._data["db_name"],
+                         default_collection=self._data["collection"])
 
     def get_users(self, user_type=None):
         """
@@ -202,6 +205,36 @@ class UserDatabase(Database):
         info = {**{"user_id": user_id}, **additional}
 
         self.upload({"user_id": user_id}, info)
+
+
+class ClassroomDatabase(Database):
+    """
+        Handler class for users actions in DB
+        """
+
+    _default_file_path = Path(__file__).resolve().parent.parent / "configs" / "database_config.json"
+
+    def __init__(self):
+        self._data = _load_from_json(self._default_file_path)["classrooms"]
+        super().__init__(url=self._data["url"], db_name=self._data["db_name"],
+                         default_collection=self._data["collection"])
+
+    def add_raw(self, classroom_id, teacher_id, additional: dict = None):
+        """
+        Add record for a new classroom
+
+        :param classroom_id:
+        :param teacher_id:
+        :param additional: any other parameters
+        :return: None
+        """
+
+        if additional is None:
+            additional = {}
+
+        info = {**{"classroom_id": classroom_id, "teacher_id": teacher_id}, **additional}
+
+        self.upload({"classroom_id": classroom_id}, info)
 
 
 class User:

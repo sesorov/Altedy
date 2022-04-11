@@ -9,7 +9,7 @@ from aiogram.utils.exceptions import BadRequest, TelegramAPIError
 
 from common.helper import UserStatus, VerifyString
 from configs.logger_conf import configure_logger
-from database.database import UserDatabase
+from database.database import UserDatabase, ClassroomDatabase
 from infrastructure.keyboards.inline_keyboards import *
 from infrastructure.keyboards.reply_keyboards import *
 from infrastructure.keyboards.callbacks import *
@@ -22,9 +22,24 @@ class Handler:
     Main class for commands processing and interactions
     """
 
-    def __init__(self, bot: Bot, db: UserDatabase, dispatcher):
+    def __init__(self, bot: Bot, db: UserDatabase, class_db: ClassroomDatabase, dispatcher):
         self.bot = bot
         self.db = db
+        self.class_db = class_db
+        self.last_msg_id = None  # Last BOT message ID (for updating)
+        self._cached_msgs = []  # Bot & user interactions messages that should be deleted after certain step, e.g. email
+
+        async def clean_chat(chat_id):
+            """
+            Delete messages in list
+            :param chat_id:
+            :param messages_ids:
+            :return:
+            """
+
+            for msg in self._cached_msgs:
+                await self.bot.delete_message(chat_id, msg)
+            self._cached_msgs.clear()
 
         @dispatcher.message_handler(commands=["start"])
         async def start(message: types.Message):
@@ -32,9 +47,10 @@ class Handler:
             Send a message when the command /start is issued.
             """
             user = message.from_user
-            await self.bot.send_message(message.chat.id, f"Hello, {user.username}! "
-                                                         f"Please, complete registration for further actions.",
-                                        reply_markup=(await get_register_keyboard()))
+            self.last_msg_id = (await self.bot.send_message(message.chat.id,
+                                                            f"Hello, {user.username}! "
+                                                            f"Please, complete registration for further actions.",
+                                                            reply_markup=(await get_register_keyboard()))).message_id
 
         @dispatcher.message_handler(commands=["help"])
         async def chat_help(message: types.Message):
@@ -55,35 +71,48 @@ class Handler:
             """
             Handle all user's text data and perform actions according to current user's status
             """
+            self._cached_msgs.append(message.message_id)  # Store user's text message for further chat cleanup
             try:
-                chat_status = await self.db.get_status(message.chat.id)
+                chat_status = self.db.get_status(message.chat.id)
 
                 if chat_status == UserStatus.WAIT_EMAIL:
                     if re.fullmatch(VerifyString.EMAIL.value, message.text):
                         self.db.update(message.chat.id, {"email": message.text})
+
+                        await clean_chat(message.chat.id)
                         self.db.set_status(message.chat.id, UserStatus.WAIT_FULL_NAME)
-                        await self.bot.send_message(message.chat.id,
-                                                    "Now please enter your full name, e.g. John Doe or Ivanov Ivan Ivanovich")
-                        await self.bot.answer_callback_query(message.chat.id)
+
+                        self._cached_msgs.append((await self.bot.send_message(
+                            message.chat.id, "Now please enter your full name, e.g. John Doe or Ivanov Ivan Ivanovich")
+                                                  ).message_id)
                     else:
-                        await self.bot.send_message(message.chat.id,
-                                                    "Sorry, the email address you entered seems to be invalid. "
-                                                    "Please, check it and send one more time.")
+                        self._cached_msgs.append((await self.bot.send_message(message.chat.id,
+                                                  "Sorry, the email address you entered seems to be invalid. "  # noqa
+                                                  "Please, check it and send one more time.")).message_id)  # noqa
 
                 if chat_status == UserStatus.WAIT_FULL_NAME:
                     if re.fullmatch(VerifyString.FULL_NAME.value, message.text):
                         self.db.update(message.chat.id, {"full_name": message.text})
+                        await clean_chat(message.chat.id)
+
                         if self.db.get_type(message.chat.id) == "student":
-                            self.db.set_status(message.chat.id, UserStatus.WAIT_CLASSROOM_ID)
+                            self.db.set_status(message.chat.id, UserStatus.MAIN_MENU)
+                            self._cached_msgs.append((await self.bot.send_message(
+                                message.chat.id, "Thanks, now we're ready to go!")).message_id)
                         else:  # teacher
-                            pass
+                            await ask_classroom_name(chat_id=message.chat.id)
                     else:
-                        await self.bot.send_message(message.chat.id,
-                                                    "Sorry, the name you entered seems to be invalid."
-                                                    "Write is as in example below:")
-                        await self.bot.send_message(message.chat.id, "Ivanov Ivan Ivanovich")
+                        self._cached_msgs.append((await self.bot.send_message(message.chat.id,
+                                                          "Sorry, the name you entered seems to be invalid."  # noqa
+                                                          "Write is as in example below:")).message_id)  # noqa
+                        self._cached_msgs.append((await self.bot.send_message(message.chat.id, "Ivanov Ivan Ivanovich")
+                                                  ).message_id)
+
+                    if chat_status == UserStatus.WAIT_CLASSROOM_NAME:
+                        pass
             except Exception as exc:
-                await self.bot.send_message(message.chat.id, no_db_message())
+                await self.bot.send_message(message.chat.id, "Sorry, I didn't get you.",
+                                            reply_markup=await get_main_menu_markup())
                 LOGGER.warning(exc)
                 return
 
@@ -98,8 +127,8 @@ class Handler:
             :return: None
             """
             self.db.add_raw(callback_query.from_user.id)
-            msg = await self.bot.send_message(callback_query.from_user.id, "Choose working mode:",
-                                              reply_markup=(await get_student_teacher_keyboard()))
+            await self.bot.edit_message_text("Choose working mode:", callback_query.from_user.id, self.last_msg_id,
+                                             reply_markup=await get_student_teacher_keyboard())
             await self.bot.answer_callback_query(callback_query.id)
 
         @dispatcher.callback_query_handler(lambda callback: callback.data in [CALLBACK_IS_STUDENT,
@@ -112,24 +141,46 @@ class Handler:
             """
             self.db.update(callback_query.from_user.id, {"type": callback_query.data})
             self.db.set_status(callback_query.from_user.id, UserStatus.WAIT_EMAIL)
-            await self.bot.send_message(callback_query.from_user.id,
-                                        "Would you like to share your email to receive notifications?",
-                                        reply_markup=(await get_ask_email_keyboard()))
+            await self.bot.edit_message_text("Would you like to share your email to receive notifications?",
+                                             callback_query.from_user.id, self.last_msg_id,
+                                             reply_markup=await get_ask_email_keyboard())
             await self.bot.answer_callback_query(callback_query.id)
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_EMAIL_TRUE)
         async def reg_ask_email(callback_query: types.CallbackQuery):
             """
             Ask for email address (if user decided to share email before)
+            Produces simple message without keyboard
             :param callback_query:
             :return: None
             """
 
-            await self.bot.send_message(callback_query.from_user.id, "Please, write your email as sample@address.com")
+            self._cached_msgs.append(self.last_msg_id)  # since next msgs are text from user, we no longer need this one
+            self._cached_msgs.append((await self.bot.send_message(
+                callback_query.from_user.id, "Please, write your email as sample@address.com")).message_id)
 
         # ================ REGISTRATION END ================
 
         # ================ CLASSROOM CREATE BEGIN ================
         # Methods below are used to maintain registration process and steps.
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_CREATE_CLASSROOM)
+        async def ask_classroom_name(callback_query: types.CallbackQuery = None, chat_id = None):
+            """
+            Ask for classroom name
+            Produces simple message without keyboard
+            :param chat_id: Pass if called from code
+            :param callback_query: Pass if called from keyboard
+            :return:
+            """
+
+            _id = chat_id if chat_id else callback_query.from_user.id
+            self.db.set_status(_id, UserStatus.WAIT_CLASSROOM_NAME)
+            self._cached_msgs.append((await self.bot.send_message(
+                            _id, "Please, enter the name of your first classroom. "
+                                 "You will be able to create more later. "
+                                 "The recommended format is like: Data Management 19BI-3")).message_id)
+            if not chat_id:
+                await self.bot.answer_callback_query(callback_query.id)
 
         # ================ CLASSROOM CREATE END ================
