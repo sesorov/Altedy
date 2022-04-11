@@ -1,9 +1,8 @@
 logs
 venv
+token
 features_test.py
 .idea
-.pyc
-configs/token
-configs/bot_config.json
-database/database_config.json
+*.pyc
+*.json
 **/__pycache__/**

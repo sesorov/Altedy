@@ -11,3 +11,6 @@ CALLBACK_IS_TEACHER = "teacher"
 
 CALLBACK_EMAIL_TRUE = "callback_enable_email_1"
 CALLBACK_EMAIL_FALSE = "callback_enable_email_0"
+
+# Classroom-related
+CALLBACK_CREATE_CLASSROOM = "callback_create_classroom"

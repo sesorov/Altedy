@@ -1,6 +1,7 @@
 """
 Main Altedy Bot script
 """
+
 import asyncio
 import logging
 from pathlib import Path
@@ -11,7 +12,7 @@ from aiogram.contrib.middlewares.logging import LoggingMiddleware
 
 from configs.logger_conf import configure_logger
 from configs.bot_conf import BotConfig
-from database.database import UserDatabase
+from database.database import UserDatabase, ClassroomDatabase
 from infrastructure.message_handler import Handler
 
 LOGGER = configure_logger(__name__)
@@ -23,12 +24,13 @@ async def init_bot(dispatcher, bot):
     """
 
     db = UserDatabase()
+    class_db = ClassroomDatabase()
     await asyncio.sleep(3)
     # Language translator
     #dispatcher_.middleware.setup(LanguageMiddleware("bot", path=Path(__file__).parents[2] / "locales", mongo=mongo_))
 
     # Message handler
-    Handler(bot, db, dispatcher)
+    Handler(bot, db, class_db, dispatcher)
 
     #dispatcher_.middleware.setup(LoggingMiddleware(logger=logger))
     #dispatcher_.middleware.setup(ThrottlingMiddleware())
