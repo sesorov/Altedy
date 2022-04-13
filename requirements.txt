@@ -1,5 +1,4 @@
 # core
 requests
-python-telegram-bot
-python-telegram-bot[socks]
+aiogram
 pymongo

@@ -19,6 +19,8 @@ class UserStatus(Enum):
 
     MAIN_MENU = 4
 
+    STUDENT_ADD_GROUP = 5
+
 
 class VerifyString(Enum):
     """
@@ -36,4 +38,4 @@ def get_md5(value):
     :return:
     """
 
-    return hashlib.md5(str(value).encode())
+    return hashlib.md5(str(value).encode()).hexdigest()

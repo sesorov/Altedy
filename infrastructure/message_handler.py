@@ -6,8 +6,9 @@ import re
 
 from aiogram import Bot, types
 from aiogram.utils.exceptions import BadRequest, TelegramAPIError
+from aiogram.types import ParseMode
 
-from common.helper import UserStatus, VerifyString
+from common.helper import UserStatus, VerifyString, get_md5
 from configs.logger_conf import configure_logger
 from database.database import UserDatabase, ClassroomDatabase
 from infrastructure.keyboards.inline_keyboards import *
@@ -75,6 +76,7 @@ class Handler:
             try:
                 chat_status = self.db.get_status(message.chat.id)
 
+                # Registration-related statuses
                 if chat_status == UserStatus.WAIT_EMAIL:
                     if re.fullmatch(VerifyString.EMAIL.value, message.text):
                         self.db.update(message.chat.id, {"email": message.text})
@@ -90,15 +92,18 @@ class Handler:
                                                   "Sorry, the email address you entered seems to be invalid. "  # noqa
                                                   "Please, check it and send one more time.")).message_id)  # noqa
 
-                if chat_status == UserStatus.WAIT_FULL_NAME:
+                elif chat_status == UserStatus.WAIT_FULL_NAME:
                     if re.fullmatch(VerifyString.FULL_NAME.value, message.text):
                         self.db.update(message.chat.id, {"full_name": message.text})
                         await clean_chat(message.chat.id)
 
                         if self.db.get_type(message.chat.id) == "student":
                             self.db.set_status(message.chat.id, UserStatus.MAIN_MENU)
+                            await clean_chat(message.chat.id)
+
                             self._cached_msgs.append((await self.bot.send_message(
-                                message.chat.id, "Thanks, now we're ready to go!")).message_id)
+                                message.chat.id, "Thanks, now we're ready to go!",
+                                reply_markup=await get_main_menu_markup("student"))).message_id)
                         else:  # teacher
                             await ask_classroom_name(chat_id=message.chat.id)
                     else:
@@ -108,11 +113,68 @@ class Handler:
                         self._cached_msgs.append((await self.bot.send_message(message.chat.id, "Ivanov Ivan Ivanovich")
                                                   ).message_id)
 
-                    if chat_status == UserStatus.WAIT_CLASSROOM_NAME:
+                elif chat_status == UserStatus.WAIT_CLASSROOM_NAME:
+                    # Generate MD5 for group using teacher's ID
+                    hash_id = get_md5(f"{message.chat.id}-{message.text}")
+                    # Add a record to classrooms database
+                    self.class_db.add_raw(classroom_id=hash_id, teacher_id=message.chat.id,
+                                          additional={"name": message.text})
+                    self._cached_msgs.append((await self.bot.send_message(
+                        message.chat.id,
+                        f"Classroom {message.text} created successfully! "
+                        f"Send its ID (message below) to your students.")).message_id)
+                    self._cached_msgs.append((await self.bot.send_message(message.chat.id,
+                                                        f"Click on ID to copy: `{hash_id}`",    # noqa
+                                                        parse_mode=ParseMode.MARKDOWN,
+                                                        reply_markup=await get_main_menu_markup("teacher"))
+                                              ).message_id)
+
+                elif chat_status == UserStatus.MAIN_MENU:
+
+                    # Registration
+                    if message.text == "Register":
+                        # Begin registration (exists)
                         pass
+
+                    # Teacher-related
+                    elif message.text == "Create group":
+                        # Run creating algorithm (exists)
+                        pass
+                    elif message.text == "Managed groups":
+                        # Show list of inline buttons representing groups
+                        pass
+
+                    # Student-related
+                    elif message.text == "Add group":
+                        await clean_chat(message.chat.id)
+                        self.db.set_status(message.chat.id, UserStatus.STUDENT_ADD_GROUP)
+
+                        self._cached_msgs.append((await self.bot.send_message(
+                            message.chat.id, "Please, send me group ID. "
+                                             "If you don't have one, ask your teacher or classmates.")).message_id)
+                    elif message.text == "My groups":
+                        # Show list of inline buttons representing groups
+                        pass
+                    elif message.text == "My marks":
+                        # Send message with avg marks for each group of current student and a file with marks
+                        pass
+                    elif message.text == "Deadlines":
+                        # Show list of deadlines for every active task in every group
+                        pass
+
+                # ============ STUDENT ACTIONS ============
+                elif chat_status == UserStatus.STUDENT_ADD_GROUP:
+                    if self.class_db.add_student(message.chat.id, message.text):
+                        self.db.set_status(message.chat.id, UserStatus.MAIN_MENU)
+                        await clean_chat(message.chat.id)
+
+                        group_name = self.class_db.get_info(message.text)["name"]
+                        self._cached_msgs.append((await self.bot.send_message(
+                            message.chat.id, f"Congratulations, you are now a member of {group_name}!",
+                            reply_markup=await get_main_menu_markup("student"))).message_id)
             except Exception as exc:
                 await self.bot.send_message(message.chat.id, "Sorry, I didn't get you.",
-                                            reply_markup=await get_main_menu_markup())
+                                            reply_markup=await get_main_menu_markup(self.db.get_type(message.chat.id)))
                 LOGGER.warning(exc)
                 return
 

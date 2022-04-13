@@ -15,14 +15,14 @@ async def get_main_menu_markup(user_type: str = None) -> ReplyKeyboardMarkup:
         keyboard = [
             [
                 KeyboardButton("Create group"),
-                KeyboardButton("Group info"),
+                KeyboardButton("Managed groups"),
             ]
         ]
     elif user_type == "student":
         keyboard = [
             [
                 KeyboardButton("Add group"),
-                KeyboardButton("Groups actions"),
+                KeyboardButton("My groups"),
             ],
             [
                 KeyboardButton("My marks"),
