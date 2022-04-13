@@ -33,6 +33,7 @@ class Database:
     def upload(self, primary_key, data, collection_name=None):
         """
         Upload/update data in MongoDB
+
         :param collection_name: Name of db collection to upload info in
         :param primary_key: For updating data
         :param data: Data to be uploaded
@@ -49,6 +50,7 @@ class Database:
     def aggregate(self, aggregation: list, collection_name=None):
         """
         Aggregate info from MongoDB
+
         :param collection_name:
         :param aggregation:
         :return: list
@@ -58,11 +60,14 @@ class Database:
             collection_name = self.default_collection
 
         collection = self.client[self.db_name][collection_name]
-        return list(collection.aggregate(aggregation))
+        res = list(collection.aggregate(aggregation))
+        LOGGER.info(f"Found {len(res)} items by aggregation: {aggregation}")
+        return res
 
     def find(self, collection_name=None, query=None):
         """
         Find info by query. Leave query empty if need to extract all data
+
         :param collection_name:
         :param query:
         :return: list
@@ -75,11 +80,14 @@ class Database:
             collection_name = self.default_collection
 
         collection = self.client[self.db_name][collection_name]
-        return list(collection.find(query))
+        res = list(collection.find(query))
+        LOGGER.info(f"Found {len(res)} items by query: {query}")
+        return res
 
     def find_one(self, query=None, collection_name: str = None):
         """
         Find only one exact record by query. Leave query empty if need to extract all data
+
         :param collection_name:
         :param query:
         :return: dict
@@ -92,13 +100,18 @@ class Database:
             collection_name = self.default_collection
 
         collection = self.client[self.db_name][collection_name]
-        return collection.find_one(query)
+        res = collection.find_one(query)
+        if res:
+            LOGGER.info(f"Found record: {res} by query: {query}")
+        else:
+            LOGGER.warning(f"Nothing found by query: {query}")
+        return res
 
-    def update(self, user_id, info: dict, collection_name=None):
+    def update(self, primary_key: dict, info: dict, collection_name=None):
         """
-        Update user information on MongoDB
+        Update information on MongoDB
         :param collection_name:
-        :param user_id: users's telegram id
+        :param primary_key: key to find data to update (e.g. {"user_id": user_id}
         :param info: dict containing info for update
         :return: None
         """
@@ -107,7 +120,37 @@ class Database:
             collection_name = self.default_collection
 
         collection = self.client[self.db_name][collection_name]
-        collection.update_one({"user_id": user_id}, {"$set": info}, upsert=True)
+        response = collection.update_one(primary_key, {"$set": info}, upsert=True).raw_result
+        if response['n']:
+            LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
+            return True
+        else:
+            LOGGER.warning(f"Could not find anything to update. Check key: {primary_key}, response: {response}")
+            return False
+
+    def array_append(self, primary_key, array_name, *elements, collection_name=None) -> bool:
+        """
+        Add element to array in MongoDB record
+
+        :param array_name: Array to append elements to
+        :param primary_key: key to find data to update (e.g. {"user_id": user_id}
+        :param collection_name:
+        :param elements: Elements to append to array
+        :return:
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        response = collection.update_one(primary_key, {'$push': {array_name: {'$each': elements}}}).raw_result
+        if response['n']:
+            LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
+            return True
+        else:
+            LOGGER.warning(f"Could not find anything to update. "
+                           f"Check key: {primary_key}, array_name: {array_name}, response: {response}")
+            return False
 
 
 class UserDatabase(Database):
@@ -121,6 +164,16 @@ class UserDatabase(Database):
         self._data = _load_from_json(self._default_file_path)["users"]
         super().__init__(url=self._data["url"], db_name=self._data["db_name"],
                          default_collection=self._data["collection"])
+
+    def update(self, user_id, info: dict, collection_name=None):
+        """
+        Update information on MongoDB
+        :param user_id:
+        :param info:
+        :param collection_name:
+        :return:
+        """
+        super().update({"user_id": user_id}, info, collection_name)
 
     def get_users(self, user_type=None):
         """
@@ -219,6 +272,16 @@ class ClassroomDatabase(Database):
         super().__init__(url=self._data["url"], db_name=self._data["db_name"],
                          default_collection=self._data["collection"])
 
+    def get_info(self, classroom_id):
+        """
+        Get group info
+
+        :param classroom_id:
+        :return:
+        """
+
+        return self.find_one({"classroom_id": classroom_id})
+
     def add_raw(self, classroom_id, teacher_id, additional: dict = None):
         """
         Add record for a new classroom
@@ -235,6 +298,17 @@ class ClassroomDatabase(Database):
         info = {**{"classroom_id": classroom_id, "teacher_id": teacher_id}, **additional}
 
         self.upload({"classroom_id": classroom_id}, info)
+
+    def add_student(self, student_id, classroom_id):
+        """
+        Add student to group
+
+        :param student_id:
+        :param classroom_id:
+        :return:
+        """
+
+        return self.array_append({"classroom_id": classroom_id}, "students", {"id": student_id}, collection_name=None)
 
 
 class User:
