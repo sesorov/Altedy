@@ -6,20 +6,25 @@ import re
 import hashlib
 from enum import Enum
 
+from aiogram.dispatcher.filters.state import State, StatesGroup
 
-class UserStatus(Enum):
+
+class UserStatus(StatesGroup):
     """
     Defines current user-bot interaction state
     """
 
-    REGISTRATION = 0
-    WAIT_EMAIL = 1
-    WAIT_FULL_NAME = 2
-    WAIT_CLASSROOM_NAME = 3
+    REGISTRATION = State()
+    WAIT_EMAIL = State()
+    WAIT_FULL_NAME = State()
+    WAIT_CLASSROOM_NAME = State()
 
-    MAIN_MENU = 4
+    MAIN_MENU = State()
 
-    STUDENT_ADD_GROUP = 5
+    STUDENT_ADD_GROUP = State()
+
+    TEACHER_VIEW_GROUPS = State()
+    TEACHER_CREATE_TASK = State()
 
 
 class VerifyString(Enum):

@@ -221,25 +221,6 @@ class UserDatabase(Database):
 
         return self.find_one({"user_id": user_id})["type"]
 
-    def get_status(self, user_id) -> UserStatus:
-        """
-        Get user status in chat (from common.helper.UserStatus)
-
-        :return: UserStatus
-        """
-
-        return UserStatus(self.find_one({"user_id": user_id})["status"])
-
-    def set_status(self, user_id, status: UserStatus):
-        """
-        Set user status in chat (from common.helper.UserStatus)
-        :param user_id:
-        :param status:
-        :return:
-        """
-
-        self.update(user_id, {"status": status.value})
-
     def add_raw(self, user_id, additional: dict = None):
         """
         Add record for not yet registered user
@@ -251,9 +232,6 @@ class UserDatabase(Database):
 
         if additional is None:
             additional = {}
-
-        if additional.get("status", None) is None:
-            additional["status"] = UserStatus.REGISTRATION.value
 
         info = {**{"user_id": user_id}, **additional}
 
@@ -272,12 +250,12 @@ class ClassroomDatabase(Database):
         super().__init__(url=self._data["url"], db_name=self._data["db_name"],
                          default_collection=self._data["collection"])
 
-    def get_info(self, classroom_id):
+    def get_info(self, classroom_id) -> dict:
         """
         Get group info
 
         :param classroom_id:
-        :return:
+        :return: {'_id': ObjectID, 'name': ..., 'classroom_id': ..., 'teachers': [...], 'students': [...]}
         """
 
         return self.find_one({"classroom_id": classroom_id})
@@ -295,7 +273,7 @@ class ClassroomDatabase(Database):
         if additional is None:
             additional = {}
 
-        info = {**{"classroom_id": classroom_id, "teacher_id": teacher_id}, **additional}
+        info = {**{"classroom_id": classroom_id, "teachers": [teacher_id]}, **additional}
 
         self.upload({"classroom_id": classroom_id}, info)
 
@@ -309,6 +287,17 @@ class ClassroomDatabase(Database):
         """
 
         return self.array_append({"classroom_id": classroom_id}, "students", {"id": student_id}, collection_name=None)
+
+    def add_teacher(self, teacher_id, classroom_id):
+        """
+        Add teacher to group (has manager access)
+
+        :param teacher_id:
+        :param classroom_id:
+        :return:
+        """
+
+        return self.array_append({"classroom_id": classroom_id}, "teachers", {"id": teacher_id}, collection_name=None)
 
 
 class User:

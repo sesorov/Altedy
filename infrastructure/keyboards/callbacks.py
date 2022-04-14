@@ -14,3 +14,4 @@ CALLBACK_EMAIL_FALSE = "callback_enable_email_0"
 
 # Classroom-related
 CALLBACK_CREATE_CLASSROOM = "callback_create_classroom"
+CALLBACK_CREATE_TASK = "callback_create_task"
