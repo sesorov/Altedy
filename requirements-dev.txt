@@ -1,5 +1,9 @@
 # SDL
-bandit
+bandit==1.7.4
 
 # linter
-pylint
+pylint==2.13.5
+flake8==4.0.1
+
+# static
+mypy==0.942
