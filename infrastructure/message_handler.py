@@ -3,6 +3,9 @@ User messages & commands processing
 """
 
 import re
+import os
+
+from pathlib import Path
 
 from aiogram import Bot, types
 from aiogram.utils.exceptions import BadRequest, TelegramAPIError
@@ -10,12 +13,13 @@ from aiogram.types import ParseMode
 from aiogram.dispatcher import filters
 from aiogram.dispatcher import FSMContext
 
-from common.helper import UserStatus, VerifyString, get_md5
+from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
 from configs.logger_conf import configure_logger
 from database.database import UserDatabase, ClassroomDatabase
 from infrastructure.keyboards.inline_keyboards import *
 from infrastructure.keyboards.reply_keyboards import *
 from infrastructure.keyboards.callbacks import *
+from infrastructure.task import Task
 
 LOGGER = configure_logger(__name__)
 
@@ -148,6 +152,27 @@ class Handler:
                                              reply_markup=await get_student_teacher_keyboard())
             await self.bot.answer_callback_query(callback_query.id)
 
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_SIGNIN)
+        async def reg_sign_in(callback_query: types.CallbackQuery):
+            """
+            Existing user login
+            :param callback_query:
+            :return: None
+            """
+            self._cached_msgs.append(self.last_msg_id)
+            await clean_chat(callback_query.from_user.id)
+            if self.db.exists(callback_query.from_user.id):
+                user_type = self.db.get_type(callback_query.from_user.id)
+                self._cached_msgs.append((await self.bot.send_message(
+                    callback_query.from_user.id, f"Welcome back, {callback_query.from_user.username}!",
+                    reply_markup=await get_main_menu_markup(user_type))).message_id)
+                await UserStatus.MAIN_MENU.set()
+            else:
+                self.last_msg_id = (await self.bot.send_message(
+                    callback_query.from_user.id, f"Sorry, you're not registered yet.",
+                    reply_markup=await get_register_keyboard())).message_id
+            await self.bot.answer_callback_query(callback_query.id)
+
         @dispatcher.callback_query_handler(lambda callback: callback.data in [CALLBACK_IS_STUDENT,
                                                                               CALLBACK_IS_TEACHER])
         async def reg_ask_email_permission(callback_query: types.CallbackQuery):
@@ -272,16 +297,15 @@ class Handler:
         # endregion
 
         # region Teacher: main actions
-
-        @dispatcher.message_handler(lambda message: message.text in ["Create group"])
+        @dispatcher.message_handler(lambda message: message.text in ["Create group"], state=UserStatus.all_states)
         async def teacher_create_group(message: types.Message):
             self._cached_msgs.append(message.message_id)
             user_id = message.chat.id
             await clean_chat(user_id)
             await ask_classroom_name(chat_id=user_id)
 
-        @dispatcher.message_handler(lambda message: message.text in ["Managed groups"])
-        async def teacher_managed_groups(message: types.Message):
+        @dispatcher.message_handler(lambda message: message.text in ["Managed groups"], state=UserStatus.all_states)
+        async def teacher_managed_groups(message: types.Message, state: FSMContext):
             self._cached_msgs.append(message.message_id)
             user_id = message.chat.id
             await clean_chat(user_id)
@@ -311,9 +335,68 @@ class Handler:
             """
 
             group_name, group_id = callback_query.data.split(':')
-            await UserStatus.TEACHER_CREATE_TASK.set()
-            await state.update_data(classroom_id=group_id)
+            # Store group ID and action performer's ID
+            await UserStatus.TEACHER_GROUPS_ACTIONS.set()
+            await state.update_data(classroom_id=group_id, teacher_id=callback_query.from_user.id)
             await self.bot.edit_message_text(f"Group {group_name} actions:", callback_query.from_user.id,
                                              self.last_msg_id, reply_markup=await get_teacher_group_actions_keyboard())
+            await self.bot.answer_callback_query(callback_query.id)
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_CREATE_TASK,
+                                           state=UserStatus.TEACHER_GROUPS_ACTIONS)
+        async def begin_create_task(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Create task for students
+            :param state:
+            :param callback_query:
+            :return:
+            """
+
+            await clean_chat(callback_query.from_user.id)
+            async with state.proxy() as data:
+                await UserStatus.TEACHER_CREATE_TASK.set()
+                await state.update_data(data)
+            self.last_msg_id = (await self.bot.send_message(callback_query.from_user.id,
+                                                            "Please, send me the task in one of the following forms:\n"
+                                                            "1. Just text message with description\n"
+                                                            "2. File (any format - up to 15MB)\n"
+                                                            "3. Photo\n"
+                                                            "3. Text + photo/file\n"
+                                                            "Use the attachment button to send me photos/files.")
+                                ).message_id
+
+        @dispatcher.message_handler(content_types=["text", "document", "photo"], state=UserStatus.TEACHER_CREATE_TASK)
+        async def handle_task_description(message: types.Message, state: FSMContext):
+            """
+            Get task information, store it in database and send to students
+            :param state:
+            :param message:
+            :return:
+            """
+
+            user_id = message.chat.id
+            await clean_chat(user_id)
+            self._cached_msgs.append(message.message_id)
+
+            description = message.text
+            task_id = get_md5(f"{user_id}-{description}-{message.message_id}")
+
+            await self.bot.send_message(user_id, f"{task_id}")
+
+            if message.content_type == "photo":
+                await message.photo[-1].download(destination_dir=get_temp_dir(user_id))
+            elif message.content_type == "document":
+                await message.document.download(destination_dir=get_temp_dir(user_id))
+            # TODO: implement malware scanner
+            async with state.proxy() as data:
+                task = Task(task_id=task_id, creator_id=user_id, classroom_id=data["classroom_id"],
+                            classroom_db=self.class_db, user_db=self.db)
+                if description:
+                    task.add_text_description(description)
+                task_files = [file for file in Path(get_temp_dir(user_id)).glob('**/*') if file.is_file()]
+                for file in task_files:
+                    task.add_file(file)
+                    os.remove(str(file))
+                task.prepare()
 
         # endregion
