@@ -4,6 +4,7 @@ General class for task actions
 
 import base64
 import bson
+import datetime
 from bson.binary import Binary
 from pathlib import Path
 
@@ -40,6 +41,7 @@ class Task:
             "filename": filename,
             "file": encoded
         })
+        LOGGER.info(f"[Task] Added file for uploading to DB: {filename}")
 
     def add_text_description(self, description):
         """
@@ -49,6 +51,24 @@ class Task:
         """
 
         self._description = description
+        LOGGER.info(f"[Task] Updated description")
+
+    def set_deadline(self, date: datetime):
+        """
+        Add/update task deadline
+
+        :param date:
+        :return:
+        """
+
+        LOGGER.info(f"[Task] Trying to update deadline")
+        tasks = self._classroom_db.find_one({"classroom_id": self._classroom_id})["tasks"]
+        element_id = None
+        for index, element in enumerate(tasks):
+            if element["id"] == self._task_id:
+                element_id = index
+                break
+        self._classroom_db.update({"classroom_id": self._classroom_id}, {f"tasks.{element_id}.deadline": date})
 
     def prepare(self):
         """
@@ -63,3 +83,4 @@ class Task:
         }
         self._classroom_db.add_task(task_id=self._task_id, creator_id=self._creator_id,
                                     classroom_id=self._classroom_id, info=task_info)
+
