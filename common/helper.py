@@ -2,11 +2,25 @@
 Useful classes, functions, etc.
 """
 
+import os
 import re
 import hashlib
 from enum import Enum
+from pathlib import Path
 
 from aiogram.dispatcher.filters.state import State, StatesGroup
+
+
+def get_temp_dir(subdir_name=None):
+    """
+    Get temp dir
+    :param subdir_name:
+    :return:
+    """
+
+    tempdir_path = Path(__file__).resolve().parent.parent / "temp" / f"{subdir_name}"
+    tempdir_path.mkdir(parents=True, exist_ok=True)
+    return tempdir_path
 
 
 class UserStatus(StatesGroup):
@@ -24,6 +38,7 @@ class UserStatus(StatesGroup):
     STUDENT_ADD_GROUP = State()
 
     TEACHER_VIEW_GROUPS = State()
+    TEACHER_GROUPS_ACTIONS = State()
     TEACHER_CREATE_TASK = State()
 
 

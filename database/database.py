@@ -175,6 +175,15 @@ class UserDatabase(Database):
         """
         super().update({"user_id": user_id}, info, collection_name)
 
+    def exists(self, user_id) -> bool:
+        """
+        Check if user with this ID exists
+        :param user_id:
+        :return:
+        """
+
+        return bool(self.find_one({"user_id": user_id}))
+
     def get_users(self, user_type=None):
         """
         Get list of all users from DB by type (none=all, students, teachers)
@@ -298,6 +307,20 @@ class ClassroomDatabase(Database):
         """
 
         return self.array_append({"classroom_id": classroom_id}, "teachers", {"id": teacher_id}, collection_name=None)
+
+    def add_task(self, task_id, creator_id, classroom_id, info: dict):
+        """
+        Add task for group
+
+        :param info:
+        :param classroom_id:
+        :param task_id:
+        :param creator_id:
+        :return:
+        """
+
+        return self.array_append({"classroom_id": classroom_id}, "tasks",
+                                 {"id": task_id, "creator_id": creator_id, **info}, collection_name=None)
 
 
 class User:

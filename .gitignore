@@ -1,5 +1,6 @@
 logs
 venv
+temp
 token
 features_test.py
 .idea
