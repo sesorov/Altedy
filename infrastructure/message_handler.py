@@ -399,4 +399,20 @@ class Handler:
                     os.remove(str(file))
                 task.prepare()
 
+            await UserStatus.TEACHER_WAIT_TASK_DEADLINE.set()
+            await state.update_data(task_id=task_id)
+            self.last_msg_id = (await self.bot.send_message(user_id,
+                                                            "Now send me the deadline for this task in any form, "
+                                                            "e.g. 26.04.2022 23:59 or 26 april 2022 23:59.")
+                                ).message_id
+
+        @dispatcher.message_handler(content_types=["text"], state=UserStatus.TEACHER_WAIT_TASK_DEADLINE)
+        async def task_deadline_handler(message: types.Message):
+            """
+            Handle tasks's deadline date
+            :param message:
+            :return:
+            """
+
+            pass
         # endregion

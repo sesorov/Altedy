@@ -40,6 +40,7 @@ class UserStatus(StatesGroup):
     TEACHER_VIEW_GROUPS = State()
     TEACHER_GROUPS_ACTIONS = State()
     TEACHER_CREATE_TASK = State()
+    TEACHER_WAIT_TASK_DEADLINE = State()
 
 
 class VerifyString(Enum):
