@@ -1,4 +1,7 @@
-import sys
+"""
+Bot configuration file
+"""
+
 import json
 
 from pathlib import Path
@@ -54,8 +57,8 @@ class BotConfig:
         for name, value in self._json_data.items():
             BotConfig._properties[name] = value
         try:
-            with open(Path(__file__).resolve().parent / "token", encoding="utf-8") as t:
-                if tkn := t.readline():
+            with open(Path(__file__).resolve().parent / "token", encoding="utf-8") as token:
+                if tkn := token.readline():
                     BotConfig._properties['APP']['TOKEN'] = tkn
         except FileNotFoundError:
             pass
@@ -63,9 +66,9 @@ class BotConfig:
     def _load_from_json(self) -> dict:
         try:
             with open(self._file_path, encoding="utf-8") as cfg_file:
-                js = json.load(cfg_file)
-                validate(js, DEFAULT_SCHEMA)
-                return js
+                json_conf = json.load(cfg_file)
+                validate(json_conf, DEFAULT_SCHEMA)
+                return json_conf
         except IOError as err:
             raise ConfigException(f"Cannot open file '{self._file_path}'") from err
         except ValidationError as err:

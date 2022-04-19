@@ -121,9 +121,8 @@ class Database:
         if response['n']:
             LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
             return True
-        else:
-            LOGGER.warning(f"Could not find anything to update. Check key: {primary_key}, response: {response}")
-            return False
+        LOGGER.warning(f"Could not find anything to update. Check key: {primary_key}, response: {response}")
+        return False
 
     def array_append(self, primary_key, array_name, *elements, collection_name=None) -> bool:
         """
@@ -144,10 +143,9 @@ class Database:
         if response['n']:
             LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
             return True
-        else:
-            LOGGER.warning(f"Could not find anything to update. "
-                           f"Check key: {primary_key}, array_name: {array_name}, response: {response}")
-            return False
+        LOGGER.warning(f"Could not find anything to update. "
+                       f"Check key: {primary_key}, array_name: {array_name}, response: {response}")
+        return False
 
 
 class UserDatabase(Database):
@@ -162,7 +160,7 @@ class UserDatabase(Database):
         super().__init__(url=self._data["url"], db_name=self._data["db_name"],
                          default_collection=self._data["collection"])
 
-    def update(self, user_id, info: dict, collection_name=None):
+    def update(self, user_id, info: dict, collection_name=None):    # pylint: disable=arguments-renamed
         """
         Update information on MongoDB
         :param user_id:
@@ -318,62 +316,3 @@ class ClassroomDatabase(Database):
 
         return self.array_append({"classroom_id": classroom_id}, "tasks",
                                  {"id": task_id, "creator_id": creator_id, **info}, collection_name=None)
-
-
-class User:
-    def __init__(self, user_id, first_name, surname, username):
-        self.user_id = user_id
-        self.first_name = first_name
-        self.surname = surname,
-        self.username = username
-        self.db: UserDatabase = UserDatabase()
-
-    def __str__(self):
-        """
-        Get user's name if possible (ID otherwise)
-        :returns: str
-        """
-        if self.username:
-            return f"@{self.username}"
-        elif self.first_name or self.surname:
-            return f"{self.first_name} {self.surname}"
-        else:
-            return str(self.user_id)
-
-    def upload_info(self, additional: dict = None):
-        """
-        Upload user info to MongoDB
-        :additional dict: Dict of any additional information
-        :return: None
-        """
-        if additional is None:
-            additional = {}
-        personal_data = {
-            "user_id": self.user_id,
-            "username": self.username,
-            "first_name": self.first_name,
-            "surname": self.surname,
-        }
-        self.db.upload({"user_id": self.user_id}, {**personal_data, **additional})
-
-
-class Student(User):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def upload_info(self, additional: dict = None):
-        if additional is None:
-            additional = {}
-        additional.update({"type": "student"})
-        super().upload_info(additional=additional)
-
-
-class Teacher(User):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def upload_info(self, additional: dict = None):
-        if additional is None:
-            additional = {}
-        additional.update({"type": "teacher"})
-        super().upload_info(additional=additional)
