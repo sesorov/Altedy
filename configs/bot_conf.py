@@ -8,6 +8,9 @@ from typing import Dict, Any
 from pathlib import Path
 from jsonschema import validate, ValidationError
 
+# pylint: disable = use-dict-literal
+
+
 DEFAULT_SCHEMA = {
     "type": "object",
     "properties": {

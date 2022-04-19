@@ -37,7 +37,7 @@ class Handler:
         self.db = db  # pylint: disable=invalid-name
         self.class_db = class_db
         self.last_msg_id = None  # Last BOT message ID (for updating)
-        self._cached_msgs = []  # Bot & user interactions messages that should be deleted after certain step, e.g. email # type: ignore # noqa
+        self._cached_msgs = []  # type: ignore # Bot & user interactions messages that should be deleted after certain step # noqa
         self._user_type = None  # student or teacher (to avoid numerous requests to DB)
 
         async def clean_chat(chat_id):
