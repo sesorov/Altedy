@@ -31,8 +31,8 @@ class Task:
         :param file_path:
         :return:
         """
-        with open(file_path, "rb") as f:
-            encoded = Binary(f.read())
+        with open(file_path, "rb") as file:
+            encoded = Binary(file.read())
         filename = Path(file_path).name
 
         self._files.append({

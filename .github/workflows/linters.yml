@@ -36,7 +36,7 @@ jobs:
       working-directory: .
     - name: Run mypy
       id: mypy
-      run: python -m mypy ./
+      run: python -m mypy --namespace-packages=True --ignore_missing_imports=True ./
       continue-on-error: true
       working-directory: .
     - name: Check on failures

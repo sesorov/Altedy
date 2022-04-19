@@ -28,9 +28,10 @@ class Handler:
     Main class for commands processing and interactions
     """
 
-    def __init__(self, bot: Bot, db: UserDatabase, class_db: ClassroomDatabase, dispatcher):
+    def __init__(self, bot: Bot, db: UserDatabase,          # pylint: disable=invalid-name
+                 class_db: ClassroomDatabase, dispatcher):
         self.bot = bot
-        self.db = db
+        self.db = db    # pylint: disable=invalid-name
         self.class_db = class_db
         self.last_msg_id = None  # Last BOT message ID (for updating)
         self._cached_msgs = []  # Bot & user interactions messages that should be deleted after certain step, e.g. email
@@ -80,7 +81,7 @@ class Handler:
         # Methods below are used to maintain registration process and steps.
 
         @dispatcher.message_handler(content_types=["text"], state=UserStatus.WAIT_EMAIL)
-        async def email_handler(message: types.Message, state: FSMContext):
+        async def email_handler(message: types.Message):
             """
             Handle user's email
 
@@ -108,7 +109,7 @@ class Handler:
                                                                       "Please, check it and send one more time.")).message_id)  # noqa
 
         @dispatcher.message_handler(content_types=["text"], state=UserStatus.WAIT_FULL_NAME)
-        async def name_handler(message: types.Message, state: FSMContext):
+        async def name_handler(message: types.Message):
             """
             Handle users's name
 
@@ -207,7 +208,7 @@ class Handler:
         # Methods below are used to maintain classroom creation process
 
         @dispatcher.message_handler(content_types=["text"], state=UserStatus.WAIT_CLASSROOM_NAME)
-        async def classroom_name_handler(message: types.Message, state: FSMContext):
+        async def classroom_name_handler(message: types.Message):
             """
             Handle classroom's name (for teacher)
             :param message:
@@ -304,7 +305,7 @@ class Handler:
             await ask_classroom_name(chat_id=user_id)
 
         @dispatcher.message_handler(lambda message: message.text in ["Managed groups"], state=UserStatus.all_states)
-        async def teacher_managed_groups(message: types.Message, state: FSMContext):
+        async def teacher_managed_groups(message: types.Message):
             self._cached_msgs.append(message.message_id)
             user_id = message.chat.id
             await clean_chat(user_id)

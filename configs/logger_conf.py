@@ -1,3 +1,7 @@
+"""
+Logger configuration module
+"""
+
 import sys
 import time
 import logging
