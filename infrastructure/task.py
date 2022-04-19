@@ -3,19 +3,26 @@ General class for task actions
 """
 
 import datetime
-from bson.binary import Binary
+
 from pathlib import Path
+
+from bson.binary import Binary
 
 from configs.logger_conf import configure_logger
 from database.database import UserDatabase, ClassroomDatabase
 
 LOGGER = configure_logger(__name__)
 
+# pylint: disable = logging-fstring-interpolation, unnecessary-pass
+
 
 class Task:
-    def __init__(self, task_id, creator_id, classroom_id, classroom_db, user_db):
+    """
+    Task actions & some database interactions wrappers
+    """
+
+    def __init__(self, task_id, classroom_id, classroom_db, user_db):
         self._task_id = task_id
-        self._creator_id = creator_id
         self._classroom_id = classroom_id
 
         self._classroom_db: ClassroomDatabase = classroom_db
@@ -51,7 +58,7 @@ class Task:
         self._description = description
         LOGGER.info("[Task] Updated description")
 
-    def set_deadline(self, date: datetime):
+    def set_deadline(self, date: datetime.datetime):
         """
         Add/update task deadline
 
@@ -68,9 +75,10 @@ class Task:
                 break
         self._classroom_db.update({"classroom_id": self._classroom_id}, {f"tasks.{element_id}.deadline": date})
 
-    def prepare(self):
+    def prepare(self, creator_id):
         """
         Initial task actions after submitting all the files/descriptions
+        :param creator_id:
         :return:
         """
 
@@ -79,5 +87,12 @@ class Task:
             "files": self._files,
             "description": self._description
         }
-        self._classroom_db.add_task(task_id=self._task_id, creator_id=self._creator_id,
+        self._classroom_db.add_task(task_id=self._task_id, creator_id=creator_id,
                                     classroom_id=self._classroom_id, info=task_info)
+
+    def send_students(self):
+        """
+        Send task to students
+        :return:
+        """
+        pass

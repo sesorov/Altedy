@@ -2,6 +2,8 @@
 User messages & commands processing
 """
 
+# pylint: disable = fixme, too-few-public-methods, wildcard-import, unused-wildcard-import, too-many-locals, too-many-statements, logging-fstring-interpolation # noqa
+
 import re
 import os
 
@@ -11,6 +13,7 @@ from aiogram import Bot, types
 from aiogram.utils.exceptions import TelegramAPIError
 from aiogram.types import ParseMode
 from aiogram.dispatcher import FSMContext
+from dateutil.parser import parse   # type: ignore
 
 from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
 from configs.logger_conf import configure_logger
@@ -28,13 +31,13 @@ class Handler:
     Main class for commands processing and interactions
     """
 
-    def __init__(self, bot: Bot, db: UserDatabase,          # pylint: disable=invalid-name
+    def __init__(self, bot: Bot, db: UserDatabase,  # pylint: disable=invalid-name
                  class_db: ClassroomDatabase, dispatcher):
         self.bot = bot
-        self.db = db    # pylint: disable=invalid-name
+        self.db = db  # pylint: disable=invalid-name
         self.class_db = class_db
         self.last_msg_id = None  # Last BOT message ID (for updating)
-        self._cached_msgs = []  # Bot & user interactions messages that should be deleted after certain step, e.g. email
+        self._cached_msgs = []  # type: ignore # Bot & user interactions messages that should be deleted after certain step # noqa
         self._user_type = None  # student or teacher (to avoid numerous requests to DB)
 
         async def clean_chat(chat_id):
@@ -246,14 +249,14 @@ class Handler:
             :return:
             """
 
-            _id = chat_id if chat_id else callback_query.from_user.id
+            _id = chat_id if chat_id else callback_query.from_user.id   # type: ignore
             self._cached_msgs.append((await self.bot.send_message(
                 _id, "Please, enter the name of your first classroom. "
                      "You will be able to create more later. "
                      "The recommended format is like: Data Management 19BI-3")).message_id)
             await UserStatus.WAIT_CLASSROOM_NAME.set()
             if not chat_id:
-                await self.bot.answer_callback_query(callback_query.id)
+                await self.bot.answer_callback_query(callback_query.id)  # type: ignore
 
         # endregion
 
@@ -389,7 +392,7 @@ class Handler:
                 await message.document.download(destination_dir=get_temp_dir(user_id))
             # TODO: implement malware scanner
             async with state.proxy() as data:
-                task = Task(task_id=task_id, creator_id=user_id, classroom_id=data["classroom_id"],
+                task = Task(task_id=task_id, classroom_id=data["classroom_id"],
                             classroom_db=self.class_db, user_db=self.db)
                 if description:
                     task.add_text_description(description)
@@ -397,22 +400,57 @@ class Handler:
                 for file in task_files:
                     task.add_file(file)
                     os.remove(str(file))
-                task.prepare()
+                task.prepare(user_id)
 
             await UserStatus.TEACHER_WAIT_TASK_DEADLINE.set()
-            await state.update_data(task_id=task_id)
-            self.last_msg_id = (await self.bot.send_message(user_id,
-                                                            "Now send me the deadline for this task in any form, "
-                                                            "e.g. 26.04.2022 23:59 or 26 april 2022 23:59.")
-                                ).message_id
+            await state.update_data(task_id=task_id, creator_id=user_id, classroom_id=data["classroom_id"])
+            self._cached_msgs.append((await self.bot.send_message(user_id,
+                                                                  "Now send me the deadline for this task in any form, "
+                                                                  "e.g. 26.04.2022 23:59 or 26 april 2022 23:59.")
+                                      ).message_id)
 
         @dispatcher.message_handler(content_types=["text"], state=UserStatus.TEACHER_WAIT_TASK_DEADLINE)
-        async def task_deadline_handler(message: types.Message):
+        async def task_deadline_handler(message: types.Message, state: FSMContext):
             """
             Handle tasks's deadline date
+            :param state:
             :param message:
             :return:
             """
 
-            pass
+            try:
+                date = parse(message.text, dayfirst=True)
+                async with state.proxy() as data:
+                    task_id, classroom_id = data["task_id"], data["classroom_id"]
+                    task = Task(task_id, classroom_id, class_db, db)
+                    task.set_deadline(date)
+                    self.last_msg_id = (await self.bot.send_message(message.chat.id,
+                                                                    "Your task is ready. Send it to students?",
+                                                                    reply_markup=await get_yes_no_keyboard())
+                                        ).message_id
+                    await UserStatus.TEACHER_SEND_TASK.set()
+                    await state.update_data(task_id=task_id, classroom_id=classroom_id)
+            except ValueError:
+                self._cached_msgs.append((await self.bot.send_message(message.chat.id,
+                                                                      "Sorry, I couldn't recognize the date format. "
+                                                                      "Try more clear format, e.g. 26.04.2022 23:59")
+                                          ).message_id)
+
+        @dispatcher.callback_query_handler(state=UserStatus.TEACHER_WAIT_TASK_DEADLINE)
+        async def teacher_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
+            await clean_chat(callback_query.from_user.id)
+            if callback_query.data == CALLBACK_YES:
+                async with state.proxy() as data:
+                    task = Task(data["task_id"], data["classroom_id"], class_db, db)
+                    task.send_students()
+                self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
+                                                                      "Task was successfully sent to students! "
+                                                                      "You'll receive solutions after deadline comes.")
+                                          ).message_id)
+            else:
+                self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
+                                                                      "Task was not sent to students. "
+                                                                      "You will be able to send/modify it later "
+                                                                      "in section 'classroom' - 'tasks'.")
+                                          ).message_id)
         # endregion
