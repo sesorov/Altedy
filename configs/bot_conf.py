@@ -4,6 +4,7 @@ Bot configuration file
 
 import json
 
+from typing import Dict, Any
 from pathlib import Path
 from jsonschema import validate, ValidationError
 
@@ -38,7 +39,7 @@ class BotConfig:
     """
 
     _instance = None
-    _properties = None
+    _properties: Dict[str, Any] = dict()
     _default_file_path = Path(__file__).resolve().parent / "bot_config.json"
 
     def __new__(cls, *args, **kwargs):  # pylint: disable=unused-argument

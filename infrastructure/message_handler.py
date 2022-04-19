@@ -2,6 +2,8 @@
 User messages & commands processing
 """
 
+# pylint: disable = fixme, too-few-public-methods, wildcard-import, unused-wildcard-import, too-many-locals, too-many-statements, logging-fstring-interpolation # noqa
+
 import re
 import os
 
@@ -11,7 +13,7 @@ from aiogram import Bot, types
 from aiogram.utils.exceptions import TelegramAPIError
 from aiogram.types import ParseMode
 from aiogram.dispatcher import FSMContext
-from dateutil.parser import parse
+from dateutil.parser import parse   # type: ignore
 
 from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
 from configs.logger_conf import configure_logger
@@ -22,8 +24,6 @@ from infrastructure.keyboards.callbacks import *
 from infrastructure.task import Task
 
 LOGGER = configure_logger(__name__)
-
-# pylint: disable = too-few-public-methods, wildcard-import, too-many-locals, too-many-statements, logging-fstring-interpolation # noqa
 
 
 class Handler:
@@ -37,7 +37,7 @@ class Handler:
         self.db = db  # pylint: disable=invalid-name
         self.class_db = class_db
         self.last_msg_id = None  # Last BOT message ID (for updating)
-        self._cached_msgs = []  # Bot & user interactions messages that should be deleted after certain step, e.g. email
+        self._cached_msgs = []  # Bot & user interactions messages that should be deleted after certain step, e.g. email # type: ignore # noqa
         self._user_type = None  # student or teacher (to avoid numerous requests to DB)
 
         async def clean_chat(chat_id):
@@ -249,14 +249,14 @@ class Handler:
             :return:
             """
 
-            _id = chat_id if chat_id else callback_query.from_user.id
+            _id = chat_id if chat_id else callback_query.from_user.id   # type: ignore
             self._cached_msgs.append((await self.bot.send_message(
                 _id, "Please, enter the name of your first classroom. "
                      "You will be able to create more later. "
                      "The recommended format is like: Data Management 19BI-3")).message_id)
             await UserStatus.WAIT_CLASSROOM_NAME.set()
             if not chat_id:
-                await self.bot.answer_callback_query(callback_query.id)
+                await self.bot.answer_callback_query(callback_query.id)  # type: ignore
 
         # endregion
 

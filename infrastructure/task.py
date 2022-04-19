@@ -13,10 +13,14 @@ from database.database import UserDatabase, ClassroomDatabase
 
 LOGGER = configure_logger(__name__)
 
-# pylint: disable = logging-fstring-interpolation
+# pylint: disable = logging-fstring-interpolation, unnecessary-pass
 
 
 class Task:
+    """
+    Task actions & some database interactions wrappers
+    """
+
     def __init__(self, task_id, classroom_id, classroom_db, user_db):
         self._task_id = task_id
         self._classroom_id = classroom_id
@@ -54,7 +58,7 @@ class Task:
         self._description = description
         LOGGER.info("[Task] Updated description")
 
-    def set_deadline(self, date: datetime):
+    def set_deadline(self, date: datetime.datetime):
         """
         Add/update task deadline
 
