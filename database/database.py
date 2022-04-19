@@ -1,12 +1,9 @@
-import sys
-import time
 import json
 import pymongo
 
 from pathlib import Path
 
 from configs.logger_conf import configure_logger
-from common.helper import UserStatus
 from configs.bot_conf import ConfigException
 
 LOGGER = configure_logger(__name__)

@@ -2,7 +2,6 @@
 Useful classes, functions, etc.
 """
 
-import os
 import re
 import hashlib
 from enum import Enum
@@ -48,8 +47,8 @@ class VerifyString(Enum):
     A collection of regex validation strings
     """
 
-    EMAIL = re.compile("([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+")
-    FULL_NAME = re.compile("[A-Za-z\-]{2,25}( [A-Za-z]{2,25})?( [A-Za-z]{2,25})?")
+    EMAIL = re.compile(r"([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+")
+    FULL_NAME = re.compile(r"[A-Za-z\-]{2,25}( [A-Za-z]{2,25})?( [A-Za-z]{2,25})?")
 
 
 def get_md5(value):
@@ -59,4 +58,4 @@ def get_md5(value):
     :return:
     """
 
-    return hashlib.md5(str(value).encode()).hexdigest()
+    return hashlib.md5(str(value).encode()).hexdigest()  # nosec
