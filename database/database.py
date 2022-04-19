@@ -1,7 +1,8 @@
 import json
-import pymongo
 
 from pathlib import Path
+
+import pymongo
 
 from configs.logger_conf import configure_logger
 from configs.bot_conf import ConfigException
@@ -178,43 +179,6 @@ class UserDatabase(Database):
         """
 
         return bool(self.find_one({"user_id": user_id}))
-
-    def get_users(self, user_type=None):
-        """
-        Get list of all users from DB by type (none=all, students, teachers)
-        :param user_type: str students/teachers/None=all
-        :return: list
-        """
-
-        if user_type == "students":
-            students = self.aggregate([
-                {
-                    "$match": {'type': 'student'}
-                }
-            ])
-            if students:
-                LOGGER.info(f"Successfully got {len(students)} students info.")
-            else:
-                LOGGER.warning(f"No students found in {self.db_name}.{self.default_collection}")
-            return students
-        elif user_type == "teachers":
-            teachers = self.aggregate([
-                {
-                    "$match": {'type': 'teacher'}
-                }
-            ])
-            if teachers:
-                LOGGER.info(f"Successfully got {len(teachers)} teachers info.")
-            else:
-                LOGGER.warning(f"No teachers found in {self.db_name}.{self.default_collection}")
-            return teachers
-        else:
-            users = list(self.find({}))
-            if users:
-                LOGGER.info(f"Successfully got {len(users)} users info.")
-            else:
-                LOGGER.warning(f"No users found in {self.db_name}.{self.default_collection}")
-            return users
 
     def get_type(self, user_id):
         """

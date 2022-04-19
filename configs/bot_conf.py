@@ -41,7 +41,7 @@ class BotConfig:
     _properties = None
     _default_file_path = Path(__file__).resolve().parent / "bot_config.json"
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):  # pylint: disable=unused-argument
         if not BotConfig._instance:
             BotConfig._instance = super(BotConfig, cls).__new__(cls)
         return BotConfig._instance

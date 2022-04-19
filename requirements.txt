@@ -2,3 +2,4 @@
 requests
 aiogram
 pymongo
+jsonschema
