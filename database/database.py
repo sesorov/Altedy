@@ -1,3 +1,9 @@
+"""
+Database general operations and handlers
+Designed for MongoDB
+Edit database_config.json for custom settings
+"""
+
 import json
 
 from pathlib import Path
@@ -8,6 +14,8 @@ from configs.logger_conf import configure_logger
 from configs.bot_conf import ConfigException
 
 LOGGER = configure_logger(__name__)
+
+# pylint: disable = too-many-lines, no-name-in-module, import-error, multiple-imports, logging-fstring-interpolation
 
 
 def _load_from_json(_path) -> dict:

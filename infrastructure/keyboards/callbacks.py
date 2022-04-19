@@ -2,6 +2,10 @@
 List of callbacks for inline keyboards
 """
 
+# General
+CALLBACK_YES = "callback_yes"
+CALLBACK_NO = "callback_no"
+
 # Registration keyboards
 CALLBACK_REGISTER_1 = "callback_register_1"
 CALLBACK_SIGNIN = "callback_signin"

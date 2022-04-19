@@ -89,3 +89,16 @@ async def get_teacher_group_actions_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton("Create task", callback_data=CALLBACK_CREATE_TASK)
     )
     return keyboard
+
+
+async def get_yes_no_keyboard() -> InlineKeyboardMarkup:
+    """
+    Simple yes/no inline keyboard. Use with states machine for correct work
+    :return:
+    """
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(
+        InlineKeyboardButton("Yes", callback_data=CALLBACK_YES),
+        InlineKeyboardButton("No", callback_data=CALLBACK_NO)
+    )
+    return keyboard
