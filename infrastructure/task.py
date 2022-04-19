@@ -2,8 +2,6 @@
 General class for task actions
 """
 
-import base64
-import bson
 import datetime
 from bson.binary import Binary
 from pathlib import Path
@@ -51,7 +49,7 @@ class Task:
         """
 
         self._description = description
-        LOGGER.info(f"[Task] Updated description")
+        LOGGER.info("[Task] Updated description")
 
     def set_deadline(self, date: datetime):
         """
@@ -61,7 +59,7 @@ class Task:
         :return:
         """
 
-        LOGGER.info(f"[Task] Trying to update deadline")
+        LOGGER.info("[Task] Trying to update deadline")
         tasks = self._classroom_db.find_one({"classroom_id": self._classroom_id})["tasks"]
         element_id = None
         for index, element in enumerate(tasks):
@@ -83,4 +81,3 @@ class Task:
         }
         self._classroom_db.add_task(task_id=self._task_id, creator_id=self._creator_id,
                                     classroom_id=self._classroom_id, info=task_info)
-

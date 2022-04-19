@@ -8,9 +8,8 @@ import os
 from pathlib import Path
 
 from aiogram import Bot, types
-from aiogram.utils.exceptions import BadRequest, TelegramAPIError
+from aiogram.utils.exceptions import TelegramAPIError
 from aiogram.types import ParseMode
-from aiogram.dispatcher import filters
 from aiogram.dispatcher import FSMContext
 
 from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir

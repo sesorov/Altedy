@@ -3,12 +3,9 @@ Main Altedy Bot script
 """
 
 import asyncio
-import logging
-from pathlib import Path
 
 from aiogram import Bot, Dispatcher, executor
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
 
 from configs.logger_conf import configure_logger
 from configs.bot_conf import BotConfig
@@ -26,14 +23,8 @@ async def init_bot(dispatcher, bot):
     db = UserDatabase()
     class_db = ClassroomDatabase()
     await asyncio.sleep(3)
-    # Language translator
-    #dispatcher_.middleware.setup(LanguageMiddleware("bot", path=Path(__file__).parents[2] / "locales", mongo=mongo_))
 
-    # Message handler
     Handler(bot, db, class_db, dispatcher)
-
-    #dispatcher_.middleware.setup(LoggingMiddleware(logger=logger))
-    #dispatcher_.middleware.setup(ThrottlingMiddleware())
 
 if __name__ == "__main__":
     LOGGER.info("Starting bot")
