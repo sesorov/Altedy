@@ -168,7 +168,7 @@ class Handler:
                 await UserStatus.MAIN_MENU.set()
             else:
                 self.last_msg_id = (await self.bot.send_message(
-                    callback_query.from_user.id, f"Sorry, you're not registered yet.",
+                    callback_query.from_user.id, "Sorry, you're not registered yet.",
                     reply_markup=await get_register_keyboard())).message_id
             await self.bot.answer_callback_query(callback_query.id)
 
