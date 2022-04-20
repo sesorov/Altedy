@@ -384,8 +384,6 @@ class Handler:
             description = message.text
             task_id = get_md5(f"{user_id}-{description}-{message.message_id}")
 
-            await self.bot.send_message(user_id, f"{task_id}")
-
             if message.content_type == "photo":
                 await message.photo[-1].download(destination_dir=get_temp_dir(user_id))
             elif message.content_type == "document":
@@ -436,13 +434,13 @@ class Handler:
                                                                       "Try more clear format, e.g. 26.04.2022 23:59")
                                           ).message_id)
 
-        @dispatcher.callback_query_handler(state=UserStatus.TEACHER_WAIT_TASK_DEADLINE)
+        @dispatcher.callback_query_handler(state=UserStatus.TEACHER_SEND_TASK)
         async def teacher_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
             await clean_chat(callback_query.from_user.id)
             if callback_query.data == CALLBACK_YES:
                 async with state.proxy() as data:
                     task = Task(data["task_id"], data["classroom_id"], class_db, db)
-                    task.send_students()
+                    await task.send_students(self.bot)
                 self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
                                                                       "Task was successfully sent to students! "
                                                                       "You'll receive solutions after deadline comes.")
