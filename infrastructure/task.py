@@ -2,16 +2,20 @@
 General class for task actions
 """
 
+import os
 import datetime
 
 from pathlib import Path
 
+from aiogram import Bot
 from bson.binary import Binary
 
+from common.helper import get_temp_dir
 from configs.logger_conf import configure_logger
 from database.database import UserDatabase, ClassroomDatabase
 
 LOGGER = configure_logger(__name__)
+
 
 # pylint: disable = logging-fstring-interpolation, unnecessary-pass
 
@@ -90,9 +94,39 @@ class Task:
         self._classroom_db.add_task(task_id=self._task_id, creator_id=creator_id,
                                     classroom_id=self._classroom_id, info=task_info)
 
-    def send_students(self):
+    async def send_students(self, bot: Bot):
         """
         Send task to students
+
+        This function gets task info (files and/or description),
+        decodes files binary strings and sends them to students from
+        classroom list.
         :return:
         """
-        pass
+
+        classroom_info = self._classroom_db.get_info(self._classroom_id)
+
+        # task-related variables
+        files = {}
+        creator_id = None
+        description = None
+        deadline = None
+
+        for task in classroom_info["tasks"]:
+            if task["id"] == self._task_id:
+                files = {file["filename"]: file["file"] for file in task["files"]}
+                creator_id, description, deadline = task["creator_id"], task["description"], task["deadline"]
+                break
+
+        for student in classroom_info["students"]:
+            await bot.send_message(student["id"], f"Greetings! You've received a new task:\n{description}\n"
+                                                  f"Deadline: {deadline}\n"
+                                                  f"Good luck!")
+            if files:
+                for filename, file_bin in files.items():
+                    file_path = Path(get_temp_dir(creator_id) / filename)
+                    with open(file_path, "wb+") as handler:
+                        handler.write(Binary(file_bin))
+                    with open(file_path, "rb") as handler:
+                        await bot.send_document(student["id"], (filename, handler))
+                    os.remove(file_path)
