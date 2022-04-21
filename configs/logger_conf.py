@@ -6,7 +6,9 @@ import sys
 import time
 import logging
 
-LOG_PATH = "F:\\Altedy\\logs"
+from pathlib import Path
+
+LOG_PATH = Path(__file__).resolve().parent.parent / "logs"
 FORMATTER = logging.Formatter("[%(asctime)s] [%(thread)d] %(name)s %(levelname)s: %(message)s")
 
 
