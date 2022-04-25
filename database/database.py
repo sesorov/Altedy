@@ -7,6 +7,7 @@ Edit database_config.json for custom settings
 import json
 
 from pathlib import Path
+from datetime import datetime
 
 import pymongo
 
@@ -14,6 +15,7 @@ from configs.logger_conf import configure_logger
 from configs.bot_conf import ConfigException
 
 LOGGER = configure_logger(__name__)
+
 
 # pylint: disable = too-many-lines, no-name-in-module, import-error, multiple-imports, logging-fstring-interpolation
 
@@ -169,7 +171,7 @@ class UserDatabase(Database):
         super().__init__(url=self._data["url"], db_name=self._data["db_name"],
                          default_collection=self._data["collection"])
 
-    def update(self, user_id, info: dict, collection_name=None):    # pylint: disable=arguments-renamed
+    def update(self, user_id, info: dict, collection_name=None):  # pylint: disable=arguments-renamed
         """
         Update information on MongoDB
         :param user_id:
@@ -288,3 +290,56 @@ class ClassroomDatabase(Database):
 
         return self.array_append({"classroom_id": classroom_id}, "tasks",
                                  {"id": task_id, "creator_id": creator_id, **info}, collection_name=None)
+
+
+class DeadlineDatabase(Database):
+    """
+        Handler class for users actions in DB
+        """
+
+    _default_file_path = Path(__file__).resolve().parent.parent / "configs" / "database_config.json"
+
+    def __init__(self):
+        self._data = _load_from_json(self._default_file_path)["deadlines"]
+        super().__init__(url=self._data["url"], db_name=self._data["db_name"],
+                         default_collection=self._data["collection"])
+
+    def add_deadline(self, classroom_id, task_id, date, additional: dict = None):
+        """
+        Add deadline to database for further notice
+        :param additional:
+        :param classroom_id:
+        :param task_id:
+        :param date:
+        :return:
+        """
+
+        if additional is None:
+            additional = {}
+
+        info = {**{"task_id": task_id, "classroom_id": classroom_id, "date": date}, **additional}
+
+        self.upload({"task_id": task_id}, info)
+
+    def get_deadlines_between(self, date_from, date_to):
+        """
+        Get list of deadlines between two dates
+        (one day and different hours/minutes/seconds is a possible case)
+        :param date_from:
+        :param date_to:
+        :return:
+        """
+
+        return self.find(query={"date": {"$gte": date_from, "$lt": date_to}})
+
+    def get_today_deadlines(self):
+        """
+        Get list of current day deadlines
+        (from 00:00 to 23:59 of todays's date)
+        :return:
+        """
+
+        today = datetime.today()
+        today_begin = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today.replace(hour=23, minute=59, second=59, microsecond=999)
+        return self.get_deadlines_between(today_begin, today_end)
