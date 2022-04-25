@@ -3,21 +3,85 @@ General class for task actions
 """
 
 import os
-import datetime
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from aiogram import Bot
 from bson.binary import Binary
 
 from common.helper import get_temp_dir
 from configs.logger_conf import configure_logger
-from database.database import UserDatabase, ClassroomDatabase
+from database.database import UserDatabase, ClassroomDatabase, DeadlineDatabase
 
 LOGGER = configure_logger(__name__)
+SCHEDULER = BackgroundScheduler()
 
 
 # pylint: disable = logging-fstring-interpolation, unnecessary-pass
+
+
+def check_deadlines():
+    """
+    Auto-checker for upcoming deadlines.
+    Checks if today is deadline for any task.
+    If so, checks every hour if it has deadlines, then every minute (only if deadlines found)
+    :return:
+    """
+
+    print("scheduler test begins")
+
+    SCHEDULER.add_job(job_daily_deadlines, "interval", hours=24, id='daily_deadlines_check')
+    SCHEDULER.start()
+
+
+def job_daily_deadlines():
+    """
+    Daily running job that checks today's deadlines
+    :return:
+    """
+
+    deadlines_db = DeadlineDatabase()   # probably should optimize databases instances
+    if deadlines_db.get_today_deadlines():
+        LOGGER.info("Found deadlines for today. Starting hourly check...")
+        SCHEDULER.add_job(job_hourly_deadlines, "interval", hours=1, id='hourly_deadlines_check')
+    LOGGER.info("Daily deadlines check started.")
+
+
+def job_hourly_deadlines():
+    """
+    Hourly running job that checks current hour's deadlines
+    Executes only when current DAY has deadlines
+    :return:
+    """
+
+    deadlines_db = DeadlineDatabase()
+
+    current_time = datetime.today()
+    begin_time = current_time.replace(hour=current_time.hour, minute=0, second=0, microsecond=0)
+    end_time = begin_time + timedelta(hours=1)
+    if deadlines_db.get_deadlines_between(begin_time, end_time):
+        LOGGER.info("Found deadlines for current hour. Starting minutely check...")
+        SCHEDULER.remove_job('hourly_deadlines_check')
+        SCHEDULER.add_job(job_minutely_deadlines, "interval", minutes=1, id='minutely_deadlines_check')
+
+
+def job_minutely_deadlines():
+    """
+    Minutely running job that checks current minute's deadlines
+    Executes only when current HOUR has deadlines
+    :return:
+    """
+
+    deadlines_db = DeadlineDatabase()
+
+    current_time = datetime.today()
+    begin_time = current_time.replace(second=0, microsecond=0)
+    end_time = begin_time + timedelta(minutes=1)
+    if deadlines_db.get_deadlines_between(begin_time, end_time):
+        LOGGER.info("Found deadlines for current minute.")
+        SCHEDULER.remove_job('minutely_deadlines_check')  # Add actions for deadline
 
 
 class Task:
@@ -25,12 +89,14 @@ class Task:
     Task actions & some database interactions wrappers
     """
 
-    def __init__(self, task_id, classroom_id, classroom_db, user_db):
+    def __init__(self, task_id, classroom_id,   # pylint: disable=too-many-arguments
+                 classroom_db=None, user_db=None, deadlines_db=None):
         self._task_id = task_id
         self._classroom_id = classroom_id
 
-        self._classroom_db: ClassroomDatabase = classroom_db
-        self._user_db: UserDatabase = user_db
+        self._classroom_db: ClassroomDatabase = classroom_db or ClassroomDatabase()
+        self._user_db: UserDatabase = user_db or UserDatabase()
+        self._deadlines_db: DeadlineDatabase = deadlines_db or DeadlineDatabase()
 
         self._files = []
         self._description = "See attachments"
@@ -62,7 +128,7 @@ class Task:
         self._description = description
         LOGGER.info("[Task] Updated description")
 
-    def set_deadline(self, date: datetime.datetime):
+    def set_deadline(self, date: datetime):
         """
         Add/update task deadline
 
@@ -116,6 +182,7 @@ class Task:
             if task["id"] == self._task_id:
                 files = {file["filename"]: file["file"] for file in task["files"]}
                 creator_id, description, deadline = task["creator_id"], task["description"], task["deadline"]
+                self._deadlines_db.add_deadline(self._classroom_id, self._task_id, deadline)
                 break
 
         for student in classroom_info["students"]:
