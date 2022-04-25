@@ -17,7 +17,7 @@ from dateutil.parser import parse   # type: ignore
 
 from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
 from configs.logger_conf import configure_logger
-from database.database import UserDatabase, ClassroomDatabase
+from database.database import UserDatabase, ClassroomDatabase, DeadlineDatabase
 from infrastructure.keyboards.inline_keyboards import *
 from infrastructure.keyboards.reply_keyboards import *
 from infrastructure.keyboards.callbacks import *
@@ -31,11 +31,14 @@ class Handler:
     Main class for commands processing and interactions
     """
 
-    def __init__(self, bot: Bot, db: UserDatabase,  # pylint: disable=invalid-name
-                 class_db: ClassroomDatabase, dispatcher):
+    def __init__(self, bot: Bot, db: UserDatabase,  # pylint: disable=invalid-name, too-many-arguments
+                 class_db: ClassroomDatabase, deadlines_db: DeadlineDatabase, dispatcher):
         self.bot = bot
+
         self.db = db  # pylint: disable=invalid-name
         self.class_db = class_db
+        self.deadlines_db = deadlines_db
+
         self.last_msg_id = None  # Last BOT message ID (for updating)
         self._cached_msgs = []  # type: ignore # Bot & user interactions messages that should be deleted after certain step # noqa
         self._user_type = None  # student or teacher (to avoid numerous requests to DB)
@@ -391,7 +394,7 @@ class Handler:
             # TODO: implement malware scanner
             async with state.proxy() as data:
                 task = Task(task_id=task_id, classroom_id=data["classroom_id"],
-                            classroom_db=self.class_db, user_db=self.db)
+                            classroom_db=self.class_db, user_db=self.db, deadlines_db=self.deadlines_db)
                 if description:
                     task.add_text_description(description)
                 task_files = [file for file in Path(get_temp_dir(user_id)).glob('**/*') if file.is_file()]
@@ -420,7 +423,7 @@ class Handler:
                 date = parse(message.text, dayfirst=True)
                 async with state.proxy() as data:
                     task_id, classroom_id = data["task_id"], data["classroom_id"]
-                    task = Task(task_id, classroom_id, class_db, db)
+                    task = Task(task_id, classroom_id, self.class_db, self.db, self.deadlines_db)
                     task.set_deadline(date)
                     self.last_msg_id = (await self.bot.send_message(message.chat.id,
                                                                     "Your task is ready. Send it to students?",
@@ -439,7 +442,7 @@ class Handler:
             await clean_chat(callback_query.from_user.id)
             if callback_query.data == CALLBACK_YES:
                 async with state.proxy() as data:
-                    task = Task(data["task_id"], data["classroom_id"], class_db, db)
+                    task = Task(data["task_id"], data["classroom_id"], self.class_db, self.db, self.deadlines_db)
                     await task.send_students(self.bot)
                 self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
                                                                       "Task was successfully sent to students! "
