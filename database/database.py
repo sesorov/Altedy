@@ -291,6 +291,26 @@ class ClassroomDatabase(Database):
         return self.array_append({"classroom_id": classroom_id}, "tasks",
                                  {"id": task_id, "creator_id": creator_id, **info}, collection_name=None)
 
+    def submit_task(self, student_id, classroom_id, info: dict):
+        """
+        Send student's answer to database
+
+        :param task_id:
+        :param student_id:
+        :param classroom_id:
+        :param info:
+        :return:
+        """
+
+        students_list = self.find_one({"classroom_id": classroom_id})["students"]
+        student_array_id = None
+        for index, student in enumerate(students_list):
+            if student["id"] == student_id:
+                student_array_id = index
+                break
+
+        self.update({"classroom_id": classroom_id}, {f"students.{student_array_id}.tasks": info})
+
 
 class DeadlineDatabase(Database):
     """

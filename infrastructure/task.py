@@ -42,7 +42,7 @@ def job_daily_deadlines(bot: Bot):
     :return:
     """
 
-    deadlines_db = DeadlineDatabase()   # probably should optimize databases instances
+    deadlines_db = DeadlineDatabase()  # probably should optimize databases instances
     if deadlines_db.get_today_deadlines():
         LOGGER.info("Found deadlines for today. Starting hourly check...")
         SCHEDULER.add_job(lambda: job_hourly_deadlines(bot), "interval", hours=1, id='hourly_deadlines_check')
@@ -91,7 +91,7 @@ class Task:
     Task actions & some database interactions wrappers
     """
 
-    def __init__(self, task_id, classroom_id,   # pylint: disable=too-many-arguments
+    def __init__(self, task_id, classroom_id,  # pylint: disable=too-many-arguments
                  classroom_db=None, user_db=None, deadlines_db=None):
         self._task_id = task_id
         self._classroom_id = classroom_id
@@ -177,6 +177,21 @@ class Task:
         }
         self._classroom_db.add_task(task_id=self._task_id, creator_id=creator_id,
                                     classroom_id=self._classroom_id, info=task_info)
+
+    def add_student_answer(self, student_id):
+        """
+        STUDENT task submission method
+        :param student_id:
+        :return:
+        """
+
+        LOGGER.info("Uploading task info to MongoDB")
+        task_info = {
+            "task_id": self._task_id,
+            "files": self._files,
+            "description": self._description
+        }
+        self._classroom_db.submit_task(student_id=student_id, classroom_id=self._classroom_id, info=task_info)
 
     async def send_students(self, bot: Bot):
         """

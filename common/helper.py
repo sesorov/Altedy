@@ -37,6 +37,7 @@ class UserStatus(StatesGroup):
     STUDENT_ADD_GROUP = State()
     STUDENT_GROUPS_ACTIONS = State()
     STUDENT_TASK_ACTIONS = State()
+    STUDENT_SUBMIT_TASK = State()
 
     VIEW_GROUPS = State()
     VIEW_TASKS = State()

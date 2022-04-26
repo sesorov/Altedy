@@ -13,7 +13,7 @@ from aiogram import Bot, types
 from aiogram.utils.exceptions import TelegramAPIError
 from aiogram.types import ParseMode
 from aiogram.dispatcher import FSMContext
-from dateutil.parser import parse   # type: ignore
+from dateutil.parser import parse  # type: ignore
 
 from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
 from configs.logger_conf import configure_logger
@@ -252,7 +252,7 @@ class Handler:
             :return:
             """
 
-            _id = chat_id if chat_id else callback_query.from_user.id   # type: ignore
+            _id = chat_id if chat_id else callback_query.from_user.id  # type: ignore
             self._cached_msgs.append((await self.bot.send_message(
                 _id, "Please, enter the name of your first classroom. "
                      "You will be able to create more later. "
@@ -417,6 +417,86 @@ class Handler:
                                              f"Available actions:",
                                              callback_query.from_user.id, self.last_msg_id, reply_markup=reply_markup)
             await self.bot.answer_callback_query(callback_query.id)
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_DOWNLOAD_TASK_ATTCHMENTS,
+                                           state=UserStatus.all_states)
+        async def download_attachments(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Send selected task attachment to user
+            Available states: UserState.STUDENT_TASK_ACTIONS, UserState.TEACHER_TASK_ACTIONS.
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            pass  # TODO: fill
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_SUBMIT_TASK,
+                                           state=UserStatus.STUDENT_TASK_ACTIONS)
+        async def student_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Ask student to send task answers (text and/or file) for further processing.
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            self._cached_msgs.append(self.last_msg_id)
+            await clean_chat(callback_query.from_user.id)
+
+            async with state.proxy() as data:
+                await UserStatus.STUDENT_SUBMIT_TASK.set()
+                await state.update_data(data)  # classroom_id, task_id, array_task_id
+            self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
+                                                                  "Please, send me your answer in the following form:\n"
+                                                                  "1. Just text message with answer\n"
+                                                                  "2. Text + file/image (any format - up to 15MB)\n"
+                                                                  "3. Just file/image\n"
+                                                                  "Use the attachment button to send me photos/files.")
+                                      ).message_id)
+
+        @dispatcher.message_handler(content_types=["text", "document", "photo"], state=UserStatus.STUDENT_SUBMIT_TASK)
+        async def handle_student_task(message: types.Message, state: FSMContext):
+            """
+            Get student's answer on selected task
+            :param message:
+            :param state:
+            :return:
+            """
+            user_id = message.chat.id
+            await clean_chat(user_id)
+            self._cached_msgs.append(message.message_id)
+
+            text_answer = message.text
+
+            if message.content_type == "photo":
+                await message.photo[-1].download(destination_dir=get_temp_dir(user_id))
+            elif message.content_type == "document":
+                await message.document.download(destination_dir=get_temp_dir(user_id))
+            # TODO: implement malware scanner
+
+            async with state.proxy() as data:  # classroom_id, task_id, array_task_id
+                task = Task(data["task_id"], data["classroom_id"], self.class_db, self.db, self.deadlines_db)
+                task_files = [file for file in Path(get_temp_dir(user_id)).glob('**/*') if file.is_file()]
+                for file in task_files:
+                    task.add_file(file)
+                    os.remove(str(file))
+                if text_answer:
+                    task.add_text_description(text_answer)
+                # TODO: ASK IF READY TO SEND => YES=SEND, NO=INACTIVE(SEND LATER)
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_QUESTION,
+                                           state=UserStatus.all_states)
+        async def student_ask_question(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Ask teacher a question.
+            Available states: UserState.STUDENT_TASK_ACTIONS, UserState.STUDENT_GROUPS_ACTIONS
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            pass  # TODO: fill
 
         # endregion
 
