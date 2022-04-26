@@ -35,9 +35,14 @@ class UserStatus(StatesGroup):
     MAIN_MENU = State()
 
     STUDENT_ADD_GROUP = State()
+    STUDENT_GROUPS_ACTIONS = State()
+    STUDENT_TASK_ACTIONS = State()
 
-    TEACHER_VIEW_GROUPS = State()
+    VIEW_GROUPS = State()
+    VIEW_TASKS = State()
+
     TEACHER_GROUPS_ACTIONS = State()
+    TEACHER_TASK_ACTIONS = State()
     TEACHER_CREATE_TASK = State()
     TEACHER_WAIT_TASK_DEADLINE = State()
     TEACHER_SEND_TASK = State()

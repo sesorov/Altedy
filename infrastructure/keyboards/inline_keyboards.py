@@ -91,6 +91,65 @@ async def get_teacher_group_actions_keyboard() -> InlineKeyboardMarkup:
     return keyboard
 
 
+async def get_student_group_actions_keyboard() -> InlineKeyboardMarkup:
+    """
+    View available TEACHER's actions in selected group
+    """
+
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(
+        InlineKeyboardButton("My tasks", callback_data=CALLBACK_STUDENT_CLASSROOM_VIEW_TASKS),
+        InlineKeyboardButton("My marks", callback_data=CALLBACK_STUDENT_CLASSROOM_VIEW_MARKS),
+        InlineKeyboardButton("Group materials", callback_data=CALLBACK_STUDENT_CLASSROOM_MATERIALS),
+        InlineKeyboardButton("Ask a question", callback_data=CALLBACK_STUDENT_QUESTION),
+    )
+    return keyboard
+
+
+async def get_teacher_task_actions_keyboard(get_files: bool = False,
+                                            is_task_active: bool = True) -> InlineKeyboardMarkup:
+    """
+    View available TEACHER's actions in selected task
+    :param is_task_active: Whether to display Activate button or not
+    :param get_files: Whether to display Download Files button or not
+    :return:
+    """
+
+    keyboard = InlineKeyboardMarkup()
+    if get_files:
+        keyboard.add(
+            InlineKeyboardButton("Download attachments", callback_data=CALLBACK_DOWNLOAD_TASK_ATTCHMENTS),
+        )
+    if not is_task_active:
+        keyboard.add(
+            InlineKeyboardButton("Activate and send", callback_data=CALLBACK_SEND_TASK),
+        )
+    keyboard.add(
+        InlineKeyboardButton("Get students' answers", callback_data=CALLBACK_GET_TASK_ANSWERS),
+        InlineKeyboardButton("Delete task", callback_data=CALLBACK_DELETE_TASK),
+    )
+    return keyboard
+
+
+async def get_student_task_actions_keyboard(get_files: bool = False) -> InlineKeyboardMarkup:
+    """
+    View available STUDENT's actions in selected task
+    :param get_files: Whether to display Download Files button or not
+    :return:
+    """
+
+    keyboard = InlineKeyboardMarkup()
+    if get_files:
+        keyboard.add(
+            InlineKeyboardButton("Download attachments", callback_data=CALLBACK_DOWNLOAD_TASK_ATTCHMENTS),
+        )
+    keyboard.add(
+        InlineKeyboardButton("Submit answer", callback_data=CALLBACK_SUBMIT_TASK),
+        InlineKeyboardButton("Ask a question", callback_data=CALLBACK_STUDENT_QUESTION),
+    )
+    return keyboard
+
+
 async def get_yes_no_keyboard() -> InlineKeyboardMarkup:
     """
     Simple yes/no inline keyboard. Use with states machine for correct work
