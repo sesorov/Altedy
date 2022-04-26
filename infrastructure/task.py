@@ -22,21 +22,21 @@ SCHEDULER = BackgroundScheduler()
 # pylint: disable = logging-fstring-interpolation, unnecessary-pass
 
 
-def check_deadlines():
+def check_deadlines(bot: Bot):
     """
     Auto-checker for upcoming deadlines.
     Checks if today is deadline for any task.
     If so, checks every hour if it has deadlines, then every minute (only if deadlines found)
+    :param bot: Bot instance for notification sending
     :return:
     """
 
-    print("scheduler test begins")
-
-    SCHEDULER.add_job(job_daily_deadlines, "interval", hours=24, id='daily_deadlines_check')
+    LOGGER.info("Starting deadlines check job.")
+    SCHEDULER.add_job(lambda: job_daily_deadlines(bot), "interval", hours=24, id='daily_deadlines_check')
     SCHEDULER.start()
 
 
-def job_daily_deadlines():
+def job_daily_deadlines(bot: Bot):
     """
     Daily running job that checks today's deadlines
     :return:
@@ -45,11 +45,11 @@ def job_daily_deadlines():
     deadlines_db = DeadlineDatabase()   # probably should optimize databases instances
     if deadlines_db.get_today_deadlines():
         LOGGER.info("Found deadlines for today. Starting hourly check...")
-        SCHEDULER.add_job(job_hourly_deadlines, "interval", hours=1, id='hourly_deadlines_check')
+        SCHEDULER.add_job(lambda: job_hourly_deadlines(bot), "interval", hours=1, id='hourly_deadlines_check')
     LOGGER.info("Daily deadlines check started.")
 
 
-def job_hourly_deadlines():
+def job_hourly_deadlines(bot: Bot):
     """
     Hourly running job that checks current hour's deadlines
     Executes only when current DAY has deadlines
@@ -64,10 +64,10 @@ def job_hourly_deadlines():
     if deadlines_db.get_deadlines_between(begin_time, end_time):
         LOGGER.info("Found deadlines for current hour. Starting minutely check...")
         SCHEDULER.remove_job('hourly_deadlines_check')
-        SCHEDULER.add_job(job_minutely_deadlines, "interval", minutes=1, id='minutely_deadlines_check')
+        SCHEDULER.add_job(lambda: job_minutely_deadlines(bot), "interval", minutes=1, id='minutely_deadlines_check')
 
 
-def job_minutely_deadlines():
+def job_minutely_deadlines(bot: Bot):
     """
     Minutely running job that checks current minute's deadlines
     Executes only when current HOUR has deadlines
@@ -79,9 +79,11 @@ def job_minutely_deadlines():
     current_time = datetime.today()
     begin_time = current_time.replace(second=0, microsecond=0)
     end_time = begin_time + timedelta(minutes=1)
-    if deadlines_db.get_deadlines_between(begin_time, end_time):
+    current_deadlines = deadlines_db.get_deadlines_between(begin_time, end_time)
+    if current_deadlines:
         LOGGER.info("Found deadlines for current minute.")
         SCHEDULER.remove_job('minutely_deadlines_check')  # Add actions for deadline
+        print(bot.id)  # debug
 
 
 class Task:
@@ -127,6 +129,22 @@ class Task:
 
         self._description = description
         LOGGER.info("[Task] Updated description")
+
+    def set_active(self, active: bool = True):
+        """
+        Activate/deactivate (old) tasks
+        :param active:
+        :return:
+        """
+
+        LOGGER.info(f"[Task] Trying to set activeness status: {active}")
+        tasks = self._classroom_db.find_one({"classroom_id": self._classroom_id})["tasks"]
+        element_id = None
+        for index, element in enumerate(tasks):
+            if element["id"] == self._task_id:
+                element_id = index
+                break
+        self._classroom_db.update({"classroom_id": self._classroom_id}, {f"tasks.{element_id}.active": active})
 
     def set_deadline(self, date: datetime):
         """
@@ -183,6 +201,7 @@ class Task:
                 files = {file["filename"]: file["file"] for file in task["files"]}
                 creator_id, description, deadline = task["creator_id"], task["description"], task["deadline"]
                 self._deadlines_db.add_deadline(self._classroom_id, self._task_id, deadline)
+                self.set_active()
                 break
 
         for student in classroom_info["students"]:

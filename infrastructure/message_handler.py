@@ -168,10 +168,10 @@ class Handler:
             self._cached_msgs.append(self.last_msg_id)
             await clean_chat(callback_query.from_user.id)
             if self.db.exists(callback_query.from_user.id):
-                user_type = self.db.get_type(callback_query.from_user.id)
+                self._user_type = self.db.get_type(callback_query.from_user.id)
                 self._cached_msgs.append((await self.bot.send_message(
                     callback_query.from_user.id, f"Welcome back, {callback_query.from_user.username}!",
-                    reply_markup=await get_main_menu_markup(user_type))).message_id)
+                    reply_markup=await get_main_menu_markup(self._user_type))).message_id)
                 await UserStatus.MAIN_MENU.set()
             else:
                 self.last_msg_id = (await self.bot.send_message(
@@ -265,8 +265,14 @@ class Handler:
 
         # region Student: main actions
 
-        @dispatcher.message_handler(lambda message: message.text in ["Add group"])
+        @dispatcher.message_handler(lambda message: message.text in ["Add group"], state=UserStatus.all_states)
         async def student_add_group(message: types.Message):
+            """
+            Begin of group adding algorythm
+            :param message:
+            :return:
+            """
+
             await clean_chat(message.chat.id)
 
             self._cached_msgs.append((await self.bot.send_message(
@@ -276,29 +282,141 @@ class Handler:
 
         @dispatcher.message_handler(content_types=["text"], state=UserStatus.STUDENT_ADD_GROUP)
         async def classroom_id_handler(message: types.Message):
+            """
+            Handle student-provided classroom_id
+            :param message:
+            :return:
+            """
             if self.class_db.add_student(message.chat.id, message.text):
                 await clean_chat(message.chat.id)
 
-                group_name = self.class_db.get_info(message.text)["name"]
+                group_info = self.class_db.get_info(message.text)
+                group_name = group_info["name"]
+                self.db.array_append({"user_id": message.chat.id}, "classrooms",
+                                     group_info["classroom_id"], collection_name=None)
                 self._cached_msgs.append((await self.bot.send_message(
                     message.chat.id, f"Congratulations, you are now a member of {group_name}!",
                     reply_markup=await get_main_menu_markup("student"))).message_id)
                 await UserStatus.MAIN_MENU.set()
+            else:
+                self._cached_msgs.append((await self.bot.send_message(
+                    message.chat.id, "Sorry, couldn't add you to the group.\n"
+                                     "Please, check the ID you've entered or list of your classrooms "
+                                     "(perhaps you are already a member of this group).")).message_id)
 
-        @dispatcher.message_handler(lambda message: message.text in ["My groups"])
+        @dispatcher.message_handler(lambda message: message.text in ["My groups"], state=UserStatus.all_states)
         async def student_show_groups(message: types.Message):
-            await clean_chat(message.chat.id)
-            # TODO: fill
+            """
+            Provide custom keyboard with student's groups
+            :param message:
+            :return:
+            """
 
-        @dispatcher.message_handler(lambda message: message.text in ["My marks"])
+            self._cached_msgs.append(message.message_id)
+            user_id = message.chat.id
+
+            student_classrooms = []
+            for group_id in self.db.find_one({"user_id": user_id})["classrooms"]:
+                student_classrooms.append(self.class_db.get_info(group_id))
+
+            keyboard = []
+            for group in student_classrooms:
+                keyboard.append([{group["name"]: f"{group['name']}:{group['classroom_id']}"}])
+
+            self.last_msg_id = (await self.bot.send_message(user_id, "Here is a list of your classrooms. "
+                                                                     "Select one to view available actions.",
+                                                            reply_markup=await get_custom_keyboard(keyboard))
+                                ).message_id
+            await UserStatus.VIEW_GROUPS.set()
+
+        @dispatcher.message_handler(lambda message: message.text in ["My marks"], state=UserStatus.all_states)
         async def student_show_marks(message: types.Message):
-            await clean_chat(message.chat.id)
+            """
+            Get student's marks in every classroom
+            :param message:
+            :return:
+            """
+
+            self._cached_msgs.append(message.message_id)
             # TODO: fill
 
-        @dispatcher.message_handler(lambda message: message.text in ["Deadlines"])
+        @dispatcher.message_handler(lambda message: message.text in ["Deadlines"], state=UserStatus.all_states)
         async def student_show_deadlines(message: types.Message):
-            await clean_chat(message.chat.id)
+            """
+            Get list of active deadlines
+            :param message:
+            :return:
+            """
+
+            self._cached_msgs.append(message.message_id)
             # TODO: fill
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_CLASSROOM_VIEW_TASKS,
+                                           state=UserStatus.STUDENT_GROUPS_ACTIONS)
+        async def student_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Submit a task
+            Sends custom keyboard with a list of buttons (representing tasks)
+            On click - switches to task and asks to send a text/image/file
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            user_id = callback_query.from_user.id
+
+            await clean_chat(user_id)
+            async with state.proxy() as data:
+                classroom_id = data["classroom_id"]
+                group_name = data["group_name"]
+                await UserStatus.VIEW_TASKS.set()
+                await state.update_data(data)
+
+            student_tasks = self.class_db.get_info(classroom_id)["tasks"]
+
+            keyboard = []
+            msg_tasks_list = []
+            for _id, task in enumerate(student_tasks):
+                deadline = task["deadline"]
+                msg_tasks_list.append(f"{_id + 1}) {task['description']}. Deadline {deadline.strftime('%d %B, %Y')}\n")
+                keyboard.append([{f"Task {_id + 1} actions": f"{_id}:{classroom_id}"}])
+
+            await self.bot.edit_message_text(f"{group_name} active tasks: \n{''.join(msg_tasks_list)}\n"
+                                             f"Select task ID to view available actions.",
+                                             callback_query.from_user.id,
+                                             self.last_msg_id, reply_markup=await get_custom_keyboard(keyboard))
+
+        @dispatcher.callback_query_handler(state=UserStatus.VIEW_TASKS)
+        async def view_task_actions(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Message with inline keyboard depicting available actions with the selected group
+            (callback data stores group's ID)
+            :param state:
+            :param callback_query:
+            :return:
+            """
+
+            array_task_id, group_id = callback_query.data.split(':')  # Store group ID and action performer's ID
+            array_task_id = int(array_task_id)
+            tasks = self.class_db.get_info(group_id)["tasks"]
+            selected_task = tasks[array_task_id]
+
+            if not self._user_type:
+                self._user_type = self.db.get_type(callback_query.from_user.id)
+
+            if self._user_type == "teacher":
+                await UserStatus.TEACHER_TASK_ACTIONS.set()
+                await state.update_data(classroom_id=group_id, task_id=selected_task["id"], array_task_id=array_task_id)
+                reply_markup = await get_teacher_task_actions_keyboard(get_files=bool(selected_task["files"]),
+                                                                       is_task_active=selected_task.get("active", True))
+            else:
+                await UserStatus.STUDENT_TASK_ACTIONS.set()
+                await state.update_data(classroom_id=group_id, task_id=selected_task["id"], array_task_id=array_task_id)
+                reply_markup = await get_student_task_actions_keyboard(get_files=bool(selected_task["files"]))
+            await self.bot.edit_message_text(f"Task {array_task_id + 1} description: {selected_task['description']}\n"
+                                             f"Available actions:",
+                                             callback_query.from_user.id, self.last_msg_id, reply_markup=reply_markup)
+            await self.bot.answer_callback_query(callback_query.id)
 
         # endregion
 
@@ -312,6 +430,12 @@ class Handler:
 
         @dispatcher.message_handler(lambda message: message.text in ["Managed groups"], state=UserStatus.all_states)
         async def teacher_managed_groups(message: types.Message):
+            """
+            Provide custom keyboard with teacher's managed groups
+            :param message:
+            :return:
+            """
+
             self._cached_msgs.append(message.message_id)
             user_id = message.chat.id
             await clean_chat(user_id)
@@ -328,10 +452,10 @@ class Handler:
                                                                      "Select one to view available actions.",
                                                             reply_markup=await get_custom_keyboard(keyboard))
                                 ).message_id
-            await UserStatus.TEACHER_VIEW_GROUPS.set()
+            await UserStatus.VIEW_GROUPS.set()
 
-        @dispatcher.callback_query_handler(state=UserStatus.TEACHER_VIEW_GROUPS)
-        async def teacher_view_group_actions(callback_query: types.CallbackQuery, state: FSMContext):
+        @dispatcher.callback_query_handler(state=UserStatus.VIEW_GROUPS)
+        async def view_group_actions(callback_query: types.CallbackQuery, state: FSMContext):
             """
             Message with inline keyboard depicting available actions with the selected group
             (callback data stores group's ID)
@@ -340,12 +464,21 @@ class Handler:
             :return:
             """
 
-            group_name, group_id = callback_query.data.split(':')
-            # Store group ID and action performer's ID
-            await UserStatus.TEACHER_GROUPS_ACTIONS.set()
-            await state.update_data(classroom_id=group_id, teacher_id=callback_query.from_user.id)
+            group_name, group_id = callback_query.data.split(':')  # Store group ID and action performer's ID
+
+            if not self._user_type:
+                self._user_type = self.db.get_type(callback_query.from_user.id)
+
+            if self._user_type == "teacher":
+                await UserStatus.TEACHER_GROUPS_ACTIONS.set()
+                await state.update_data(classroom_id=group_id, teacher_id=callback_query.from_user.id)
+                reply_markup = await get_teacher_group_actions_keyboard()
+            else:
+                await UserStatus.STUDENT_GROUPS_ACTIONS.set()
+                await state.update_data(classroom_id=group_id, group_name=group_name)
+                reply_markup = await get_student_group_actions_keyboard()
             await self.bot.edit_message_text(f"Group {group_name} actions:", callback_query.from_user.id,
-                                             self.last_msg_id, reply_markup=await get_teacher_group_actions_keyboard())
+                                             self.last_msg_id, reply_markup=reply_markup)
             await self.bot.answer_callback_query(callback_query.id)
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_CREATE_TASK,
@@ -363,12 +496,15 @@ class Handler:
                 await UserStatus.TEACHER_CREATE_TASK.set()
                 await state.update_data(data)
             self.last_msg_id = (await self.bot.send_message(callback_query.from_user.id,
-                                                            "Please, send me the task in one of the following forms:\n"
+                                                            "Please, send me the task in the following form:\n"
                                                             "1. Just text message with description\n"
-                                                            "2. File (any format - up to 15MB)\n"
-                                                            "3. Photo\n"
-                                                            "3. Text + photo/file\n"
-                                                            "Use the attachment button to send me photos/files.")
+                                                            "2. Text description + file (any format - up to 15MB)\n"
+                                                            "3. Text description + image\n"
+                                                            "Use the attachment button to send me photos/files.\n"
+                                                            "Warning: don't send files "
+                                                            "without text message description! Although it is possible,"
+                                                            " description helps students to understand and estimate "
+                                                            "the task quickly without opening full text.")
                                 ).message_id
 
         @dispatcher.message_handler(content_types=["text", "document", "photo"], state=UserStatus.TEACHER_CREATE_TASK)
@@ -449,6 +585,9 @@ class Handler:
                                                                       "You'll receive solutions after deadline comes.")
                                           ).message_id)
             else:
+                async with state.proxy() as data:
+                    task = Task(data["task_id"], data["classroom_id"], self.class_db, self.db, self.deadlines_db)
+                    task.set_active(False)
                 self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
                                                                       "Task was not sent to students. "
                                                                       "You will be able to send/modify it later "

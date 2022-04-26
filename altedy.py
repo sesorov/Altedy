@@ -27,7 +27,7 @@ async def init_bot(dispatcher, bot):
     await asyncio.sleep(3)
 
     Handler(bot, db, class_db, deadlines_db, dispatcher)
-    check_deadlines()
+    check_deadlines(bot)
 
 if __name__ == "__main__":
     LOGGER.info("Starting bot")
