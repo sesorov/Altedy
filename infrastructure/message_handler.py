@@ -483,7 +483,17 @@ class Handler:
                     os.remove(str(file))
                 if text_answer:
                     task.add_text_description(text_answer)
-                # TODO: ASK IF READY TO SEND => YES=SEND, NO=INACTIVE(SEND LATER)
+                task.add_student_answer(user_id)
+                await clean_chat(user_id)
+                await UserStatus.MAIN_MENU.set()
+                self._cached_msgs.append((await self.bot.send_message(user_id,
+                                                                      f"Received and successfully uploaded "
+                                                                      f"{len(task_files)} files and description: "
+                                                                      f"{text_answer}.\nYou will be able to "
+                                                                      f"re-upload your answer any time before "
+                                                                      f"deadline.",
+                                                                      reply_markup=await get_main_menu_markup("student"))
+                                          ).message_id)
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_QUESTION,
                                            state=UserStatus.all_states)

@@ -6,6 +6,9 @@ import os
 
 from datetime import datetime, timedelta
 from pathlib import Path
+from shutil import make_archive, rmtree
+
+import xlsxwriter
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from aiogram import Bot
@@ -86,6 +89,55 @@ def job_minutely_deadlines(bot: Bot):
         print(bot.id)  # debug
 
 
+def pack_answers(classroom_id, task_id, destination_dir, classroom_db: ClassroomDatabase = None):
+    """
+    Generates ZIP-archive with structure: <id>/<files>, <id>/<files>, ..., gradebook.xlsx
+    gradebook.xlsx is a MANAGER file with all the necessary links and grading column,
+    which is necessary for further task processing.
+    :param classroom_id:
+    :param task_id:
+    :param destination_dir:
+    :param classroom_db:
+    :return:
+    """
+
+    if not classroom_db:
+        classroom_db = ClassroomDatabase()
+
+    students_answers = {}
+    students_tasks = {student["id"]: student["tasks"] for student in classroom_db.get_info(classroom_id)["students"]}
+    for student_id, tasks in students_tasks.items():
+        for task in tasks:
+            if task["task_id"] == task_id:
+                students_answers[student_id] = task
+                break
+
+    gradebook = xlsxwriter.Workbook(Path(destination_dir) / "temp" / "gradebook.xlsx")
+    worksheet = gradebook.add_worksheet()
+    header_row = ["id", "answer_dir", "mark"]
+    for col_num, data in enumerate(header_row):
+        worksheet.write(0, col_num, data)
+
+    row, col = 1, 0
+    for student_id, task_data in students_answers.items():
+        destination_root = Path(destination_dir) / "temp" / str(student_id)
+        destination_root.mkdir(exist_ok=True, parents=True)
+        with open(Path(destination_root / "description.txt"), "w+") as description_file:
+            description_file.write(task_data["description"])
+        for file in task_data["files"]:
+            with open(Path(destination_root / file["filename"]), "wb+") as attachment_file:
+                attachment_file.write(Binary(file["file"]))
+        worksheet.write(row, col, str(student_id))
+        worksheet.write_url(row, col + 1, f'external:{student_id}/', string="Click to open folder",
+                            tip='TIP: Link will work only if this excel table is in the same dir '
+                                'as students answers dirs (same folder structure as in archive).')
+        row += 1
+    gradebook.close()
+
+    make_archive(Path(destination_dir) / f"{task_id}", "zip", Path(destination_dir) / "temp")
+    rmtree(Path(destination_dir) / "temp")
+
+
 class Task:
     """
     Task actions & some database interactions wrappers
@@ -132,7 +184,8 @@ class Task:
 
     def set_active(self, active: bool = True):
         """
-        Activate/deactivate (old) tasks
+        Activate/deactivate new tasks
+        Warning: old tasks (after deadline
         :param active:
         :return:
         """

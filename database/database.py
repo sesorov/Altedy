@@ -115,13 +115,13 @@ class Database:
             LOGGER.warning(f"Nothing found by query: {query}")
         return res
 
-    def update(self, primary_key: dict, info: dict, collection_name=None):
+    def update(self, primary_key: dict, info: dict, collection_name=None) -> bool:
         """
         Update information on MongoDB
         :param collection_name:
         :param primary_key: key to find data to update (e.g. {"user_id": user_id}
         :param info: dict containing info for update
-        :return: None
+        :return: bool
         """
 
         if not collection_name:
@@ -133,6 +133,29 @@ class Database:
             LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
             return True
         LOGGER.warning(f"Could not find anything to update. Check key: {primary_key}, response: {response}")
+        return False
+
+    def array_remove(self, primary_key: dict, array_name: str, array_key: dict, collection_name=None) -> bool:
+        """
+        Remove element from array in MongoDB
+
+        :param primary_key: To find record in MongoDB
+        :param array_name: Array to remove element from
+        :param array_key: Key to find the element to remove
+        :param collection_name:
+        :return:
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        response = collection.update_one(primary_key, {'$pull': {array_name: array_key}}).raw_result
+        if response['n']:
+            LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
+            return True
+        LOGGER.warning(f"Could not find anything to remove. "
+                       f"Check key: {primary_key}, array_name: {array_name}, response: {response}")
         return False
 
     def array_append(self, primary_key, array_name, *elements, collection_name=None) -> bool:
@@ -295,7 +318,6 @@ class ClassroomDatabase(Database):
         """
         Send student's answer to database
 
-        :param task_id:
         :param student_id:
         :param classroom_id:
         :param info:
@@ -309,7 +331,9 @@ class ClassroomDatabase(Database):
                 student_array_id = index
                 break
 
-        self.update({"classroom_id": classroom_id}, {f"students.{student_array_id}.tasks": info})
+        self.array_remove({"classroom_id": classroom_id}, f"students.{student_array_id}.tasks",
+                          {"task_id": info["task_id"]})
+        self.array_append({"classroom_id": classroom_id}, f"students.{student_array_id}.tasks", info)
 
 
 class DeadlineDatabase(Database):
