@@ -26,7 +26,7 @@ def configure_logger(name=None):
     stream_handler.setLevel(logging.DEBUG)
     stream_handler.setFormatter(FORMATTER)
 
-    file_handler = logging.FileHandler(f"{LOG_PATH}\\{__name__.replace('.', '-')}_{log_time}.log")
+    file_handler = logging.FileHandler(f"{LOG_PATH}\\{name.replace('.', '-')}_{log_time}.log")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(FORMATTER)
 
