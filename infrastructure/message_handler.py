@@ -21,7 +21,7 @@ from database.database import UserDatabase, ClassroomDatabase, DeadlineDatabase
 from infrastructure.keyboards.inline_keyboards import *
 from infrastructure.keyboards.reply_keyboards import *
 from infrastructure.keyboards.callbacks import *
-from infrastructure.task import Task
+from infrastructure.task import Task, pack_answers
 
 LOGGER = configure_logger(__name__)
 
@@ -351,11 +351,11 @@ class Handler:
             self._cached_msgs.append(message.message_id)
             # TODO: fill
 
-        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_CLASSROOM_VIEW_TASKS,
-                                           state=UserStatus.STUDENT_GROUPS_ACTIONS)
-        async def student_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
+        @dispatcher.callback_query_handler(lambda callback: callback.data in [CALLBACK_STUDENT_CLASSROOM_VIEW_TASKS,
+                                                                              CALLBACK_TEACHER_CLASSROOM_VIEW_TASKS],
+                                           state=UserStatus.all_states)
+        async def view_tasks_list(callback_query: types.CallbackQuery, state: FSMContext):
             """
-            Submit a task
             Sends custom keyboard with a list of buttons (representing tasks)
             On click - switches to task and asks to send a text/image/file
             :param callback_query:
@@ -433,7 +433,7 @@ class Handler:
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_SUBMIT_TASK,
                                            state=UserStatus.STUDENT_TASK_ACTIONS)
-        async def student_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
+        async def begin_student_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
             """
             Ask student to send task answers (text and/or file) for further processing.
             :param callback_query:
@@ -561,7 +561,8 @@ class Handler:
 
             if self._user_type == "teacher":
                 await UserStatus.TEACHER_GROUPS_ACTIONS.set()
-                await state.update_data(classroom_id=group_id, teacher_id=callback_query.from_user.id)
+                await state.update_data(classroom_id=group_id, group_name=group_name,
+                                        teacher_id=callback_query.from_user.id)
                 reply_markup = await get_teacher_group_actions_keyboard()
             else:
                 await UserStatus.STUDENT_GROUPS_ACTIONS.set()
@@ -672,7 +673,9 @@ class Handler:
                     await task.send_students(self.bot)
                 self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
                                                                       "Task was successfully sent to students! "
-                                                                      "You'll receive solutions after deadline comes.")
+                                                                      "You'll receive solutions after deadline comes.",
+                                                                      reply_markup=await get_main_menu_markup("teacher")
+                                                                      )
                                           ).message_id)
             else:
                 async with state.proxy() as data:
@@ -681,6 +684,40 @@ class Handler:
                 self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
                                                                       "Task was not sent to students. "
                                                                       "You will be able to send/modify it later "
-                                                                      "in section 'classroom' - 'tasks'.")
+                                                                      "in section 'classroom' - 'tasks'.",
+                                                                      reply_markup=await get_main_menu_markup("teacher"))
                                           ).message_id)
+            await UserStatus.MAIN_MENU.set()
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_GET_TASK_ANSWERS,
+                                           state=UserStatus.TEACHER_TASK_ACTIONS)
+        async def teacher_get_task_answers(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Get students' answers on task any time before deadline.
+            Outputs .zip archive with anonymous answers (with depersonalized ID) and excel manager table for marks
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            await clean_chat(callback_query.from_user.id)
+            async with state.proxy() as data:  # classroom_id, task_id, array_task_id
+                zip_dir_path = Path(get_temp_dir(callback_query.from_user.id)) / "tasks_packed"
+                zip_file = pack_answers(data["classroom_id"], data["task_id"], zip_dir_path, self.class_db)
+                with open(zip_file, "rb") as handler:
+                    self._cached_msgs.append(await self.bot.send_message(callback_query.from_user.id,
+                                                                         "Here is a ZIP-archive with students' answers"
+                                                                         " awailable at this moment. You'll receive "
+                                                                         "the updated version again after deadline. "
+                                                                         "Please, unpack it in single folder and "
+                                                                         "do not rename the excel file. It has links "
+                                                                         "to all students' answers and a mark column.\n"
+                                                                         "After evaluating, please send me this "
+                                                                         "excel file - just by the attachment button "
+                                                                         "from the main menu."))
+                    await self.bot.send_document(callback_query.from_user.id,
+                                                 (f"task_{data['array_task_id']}.zip", handler),
+                                                 reply_markup=await get_main_menu_markup("teacher"))
+            await UserStatus.MAIN_MENU.set()
+
         # endregion

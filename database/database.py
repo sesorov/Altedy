@@ -181,6 +181,37 @@ class Database:
                        f"Check key: {primary_key}, array_name: {array_name}, response: {response}")
         return False
 
+    def move_element(self, primary_key, array_from, element_id, array_to, collection_name=None) -> bool:
+        """
+        Move element from one array to another.
+        Example use case: archive tasks
+
+        :param primary_key: key to find a MongoDB record with array_from
+        :param array_from: name of array from element will be moved
+        :param element_id: id array element to move
+        :param array_to: name of array to which an element will be moved
+        :param collection_name: leave empty to use the default one
+        :return: bool response (success/fail)
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+        collection = self.client[self.db_name][collection_name]
+
+        record = collection.find_one(primary_key)
+        element = record[array_from][element_id]
+
+        response = collection.update(primary_key, {
+            "$pull": {array_from: element},
+            "$addToSet": {array_to: element}
+        })
+        if response['n']:
+            LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
+            return True
+        LOGGER.warning(f"Could not find anything to move. "
+                       f"Check key: {primary_key}, array_from: {array_from}, array_to: {array_to}, el_id: {element_id}")
+        return False
+
 
 class UserDatabase(Database):
     """
@@ -241,8 +272,8 @@ class UserDatabase(Database):
 
 class ClassroomDatabase(Database):
     """
-        Handler class for users actions in DB
-        """
+    Handler class for users actions in DB
+    """
 
     _default_file_path = Path(__file__).resolve().parent.parent / "configs" / "database_config.json"
 
@@ -338,8 +369,8 @@ class ClassroomDatabase(Database):
 
 class DeadlineDatabase(Database):
     """
-        Handler class for users actions in DB
-        """
+    Handler class for users actions in DB
+    """
 
     _default_file_path = Path(__file__).resolve().parent.parent / "configs" / "database_config.json"
 

@@ -25,6 +25,7 @@ CALLBACK_DOWNLOAD_TASK_ATTCHMENTS = "callback_download_task_files"
 CALLBACK_SEND_TASK = "callback_send_task"
 CALLBACK_GET_TASK_ANSWERS = "callback_get_task_answers"
 CALLBACK_DELETE_TASK = "callback_delete_task"
+CALLBACK_TEACHER_CLASSROOM_VIEW_TASKS = "callback_teacher_classroom_view_tasks"
 
 # Student-related
 CALLBACK_SUBMIT_TASK = "callback_submit_task"
