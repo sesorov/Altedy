@@ -17,7 +17,7 @@ from configs.bot_conf import ConfigException
 LOGGER = configure_logger(__name__)
 
 
-# pylint: disable = too-many-lines, no-name-in-module, import-error, multiple-imports, logging-fstring-interpolation
+# pylint: disable = too-many-lines, no-name-in-module, import-error, multiple-imports, logging-fstring-interpolation, too-many-arguments # noqa
 
 
 def _load_from_json(_path) -> dict:
@@ -92,7 +92,7 @@ class Database:
         LOGGER.info(f"Found {len(res)} items by query: {query}")
         return res
 
-    def find_one(self, query=None, collection_name: str = None):
+    def find_one(self, query=None, collection_name: str = None) -> dict:
         """
         Find only one exact record by query. Leave query empty if need to extract all data
 
@@ -108,7 +108,7 @@ class Database:
             collection_name = self.default_collection
 
         collection = self.client[self.db_name][collection_name]
-        res = collection.find_one(query)
+        res = collection.find_one(query) or {}
         if res:
             LOGGER.info(f"Found record: {res} by query: {query}")
         else:

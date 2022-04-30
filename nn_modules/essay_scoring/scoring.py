@@ -1,17 +1,16 @@
+"""
+Plugin for Altedy Tasks.
+Neural Network handler for automated English essay scoring.
+"""
+
 import numpy as np
-import pandas as pd
 import nltk
 import re
+
 from nltk.corpus import stopwords
-from nltk.tokenize import sent_tokenize, word_tokenize
-from gensim.models import Word2Vec
-from keras.layers import Embedding, LSTM, Dense, Dropout, Lambda, Flatten
-from keras.models import Sequential, load_model, model_from_config
+from keras.layers import LSTM, Dense, Dropout
+from keras.models import Sequential, load_model
 from gensim.models.keyedvectors import KeyedVectors
-import keras.backend as K
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import cohen_kappa_score
 
 nltk.download('stopwords')
 nltk.download('punkt')

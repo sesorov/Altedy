@@ -23,7 +23,7 @@ LOGGER = configure_logger(__name__)
 SCHEDULER = AsyncIOScheduler()
 
 
-# pylint: disable = logging-fstring-interpolation, unnecessary-pass
+# pylint: disable = logging-fstring-interpolation, unnecessary-pass, too-many-locals
 
 
 def check_deadlines(bot: Bot):
@@ -94,7 +94,7 @@ async def job_minutely_deadlines(bot: Bot):
             classroom_id = deadline["classroom_id"]
 
             classroom_info = classroom_db.get_info(classroom_id)
-            task_info = None
+            task_info = {}
             for task in classroom_info["tasks"]:
                 if task["id"] == task_id:
                     task_info = task
@@ -105,7 +105,7 @@ async def job_minutely_deadlines(bot: Bot):
             for teacher_id in classroom_info["teachers"]:
                 with open(zip_file, "rb") as handler:
                     await bot.send_message(teacher_id, "Hello, the deadline has finally come for your task with the "
-                                                       f"description:\n<<{task_info['description']}>>")
+                                                       f"description:\n<<{task_info.get('description', 'empty')}>>")
                     await bot.send_message(teacher_id,
                                            "Here is a ZIP-archive with students' answers awailable at this moment."
                                            "Please, unpack it in single folder and do not rename the excel file. "
@@ -116,7 +116,7 @@ async def job_minutely_deadlines(bot: Bot):
                                             reply_markup=await get_main_menu_markup("teacher"))
             for student_id in classroom_info["students"]:
                 await bot.send_message(student_id, "Hello, the deadline has finally come for your task with the "
-                                                   f"description:\n<<{task_info['description']}>>\n"
+                                                   f"description:\n<<{task_info.get('description', 'empty')}>>\n"
                                                    f"Your answers were already sent to teacher.\n"
                                                    f"You will receive a notification when your work is evaluated. "
                                                    f"Have a nice day!")
@@ -158,7 +158,7 @@ def pack_answers(classroom_id, task_id, destination_dir, classroom_db: Classroom
     for student_id, task_data in students_answers.items():
         destination_root = Path(destination_dir) / "temp" / str(student_id)
         destination_root.mkdir(exist_ok=True, parents=True)
-        with open(Path(destination_root / "description.txt"), "w+") as description_file:
+        with open(Path(destination_root / "description.txt"), "w+", encoding="UTF-8") as description_file:
             description_file.write(task_data["description"])
         for file in task_data["files"]:
             with open(Path(destination_root / file["filename"]), "wb+") as attachment_file:
@@ -170,7 +170,8 @@ def pack_answers(classroom_id, task_id, destination_dir, classroom_db: Classroom
         row += 1
     gradebook.close()
 
-    make_archive(Path(destination_dir) / f"{task_id}", "zip", Path(destination_dir) / "temp")
+    archive_path = Path(destination_dir) / f"{task_id}"
+    make_archive(str(archive_path), "zip", Path(destination_dir) / "temp")
     rmtree(Path(destination_dir) / "temp")
     return Path(destination_dir) / f"{task_id}.zip"
 
@@ -202,6 +203,7 @@ class Task:
         for index, element in enumerate(tasks):
             if element["id"] == self._task_id:
                 return index
+        return None
 
     def add_file(self, file_path):
         """
@@ -250,7 +252,6 @@ class Task:
         """
 
         LOGGER.info(f"[Task] Archiving task: {self._task_id}")
-        tasks = self._classroom_db.find_one({"classroom_id": self._classroom_id})["tasks"]
         element_id = self._get_array_id()
         self._classroom_db.move_element({"classroom_id": self._classroom_id}, "tasks", element_id, "archived_tasks")
 
@@ -263,7 +264,6 @@ class Task:
         """
 
         LOGGER.info("[Task] Trying to update deadline")
-        tasks = self._classroom_db.find_one({"classroom_id": self._classroom_id})["tasks"]
         element_id = self._get_array_id()
         self._classroom_db.update({"classroom_id": self._classroom_id}, {f"tasks.{element_id}.deadline": date})
 

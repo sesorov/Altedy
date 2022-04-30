@@ -14,6 +14,7 @@ from aiogram.utils.exceptions import TelegramAPIError
 from aiogram.types import ParseMode
 from aiogram.dispatcher import FSMContext
 from dateutil.parser import parse  # type: ignore
+from bson.binary import Binary
 
 from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
 from configs.logger_conf import configure_logger
@@ -429,7 +430,19 @@ class Handler:
             :return:
             """
 
-            pass  # TODO: fill
+            await clean_chat(callback_query.from_user.id)
+            async with state.proxy() as data:  # classroom_id, task_id, array_task_id
+                tasks = self.class_db.get_info(data["classroom_id"])["tasks"]
+                selected_task = tasks[data["array_task_id"]]
+                files = {file["filename"]: file["file"] for file in selected_task["files"]}
+
+                for filename, file_bin in files.items():
+                    file_path = Path(get_temp_dir(callback_query.from_user.id) / filename)
+                    with open(file_path, "wb+") as handler:
+                        handler.write(Binary(file_bin))
+                    with open(file_path, "rb") as handler:
+                        await bot.send_document(callback_query.from_user.id, (filename, handler))
+                    os.remove(file_path)
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_SUBMIT_TASK,
                                            state=UserStatus.STUDENT_TASK_ACTIONS)
@@ -497,7 +510,7 @@ class Handler:
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_QUESTION,
                                            state=UserStatus.all_states)
-        async def student_ask_question(callback_query: types.CallbackQuery, state: FSMContext):
+        async def student_ask_question(callback_query: types.CallbackQuery, state: FSMContext):  # pylint: disable=unused-argument # noqa
             """
             Ask teacher a question.
             Available states: UserState.STUDENT_TASK_ACTIONS, UserState.STUDENT_GROUPS_ACTIONS
@@ -506,7 +519,7 @@ class Handler:
             :return:
             """
 
-            pass  # TODO: fill
+            pass  # TODO: fill   # pylint: disable=unused-argument, unnecessary-pass
 
         # endregion
 
