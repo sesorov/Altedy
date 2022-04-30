@@ -86,7 +86,8 @@ async def get_teacher_group_actions_keyboard() -> InlineKeyboardMarkup:
 
     keyboard = InlineKeyboardMarkup()
     keyboard.add(
-        InlineKeyboardButton("Create task", callback_data=CALLBACK_CREATE_TASK)
+        InlineKeyboardButton("Create task", callback_data=CALLBACK_CREATE_TASK),
+        InlineKeyboardButton("Active tasks", callback_data=CALLBACK_TEACHER_CLASSROOM_VIEW_TASKS),
     )
     return keyboard
 
@@ -125,7 +126,7 @@ async def get_teacher_task_actions_keyboard(get_files: bool = False,
             InlineKeyboardButton("Activate and send", callback_data=CALLBACK_SEND_TASK),
         )
     keyboard.add(
-        InlineKeyboardButton("Get students' answers", callback_data=CALLBACK_GET_TASK_ANSWERS),
+        InlineKeyboardButton("Get answers", callback_data=CALLBACK_GET_TASK_ANSWERS),
         InlineKeyboardButton("Delete task", callback_data=CALLBACK_DELETE_TASK),
     )
     return keyboard

@@ -1,11 +1,21 @@
 # core
-requests
-aiogram
-pymongo
+requests==2.27.1
+aiogram==2.20
+pymongo==4.1.1
+
+# data processing
+numpy==1.22.3
+pandas==1.4.2
+scikit-learn==1.0.2
+nltk==3.7
+tensorflow==2.8.0
+keras==2.8.0
+gensim==4.1.2
 
 # validation
-jsonschema
+jsonschema==4.4.0
 
 # helpers
-python-dateutil
-apscheduler
+python-dateutil==2.8.2
+apscheduler==3.9.1
+xlsxwriter==3.0.3

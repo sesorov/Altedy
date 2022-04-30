@@ -17,7 +17,7 @@ from configs.bot_conf import ConfigException
 LOGGER = configure_logger(__name__)
 
 
-# pylint: disable = too-many-lines, no-name-in-module, import-error, multiple-imports, logging-fstring-interpolation
+# pylint: disable = too-many-lines, no-name-in-module, import-error, multiple-imports, logging-fstring-interpolation, too-many-arguments # noqa
 
 
 def _load_from_json(_path) -> dict:
@@ -92,7 +92,7 @@ class Database:
         LOGGER.info(f"Found {len(res)} items by query: {query}")
         return res
 
-    def find_one(self, query=None, collection_name: str = None):
+    def find_one(self, query=None, collection_name: str = None) -> dict:
         """
         Find only one exact record by query. Leave query empty if need to extract all data
 
@@ -108,20 +108,20 @@ class Database:
             collection_name = self.default_collection
 
         collection = self.client[self.db_name][collection_name]
-        res = collection.find_one(query)
+        res = collection.find_one(query) or {}
         if res:
             LOGGER.info(f"Found record: {res} by query: {query}")
         else:
             LOGGER.warning(f"Nothing found by query: {query}")
         return res
 
-    def update(self, primary_key: dict, info: dict, collection_name=None):
+    def update(self, primary_key: dict, info: dict, collection_name=None) -> bool:
         """
         Update information on MongoDB
         :param collection_name:
         :param primary_key: key to find data to update (e.g. {"user_id": user_id}
         :param info: dict containing info for update
-        :return: None
+        :return: bool
         """
 
         if not collection_name:
@@ -133,6 +133,29 @@ class Database:
             LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
             return True
         LOGGER.warning(f"Could not find anything to update. Check key: {primary_key}, response: {response}")
+        return False
+
+    def array_remove(self, primary_key: dict, array_name: str, array_key: dict, collection_name=None) -> bool:
+        """
+        Remove element from array in MongoDB
+
+        :param primary_key: To find record in MongoDB
+        :param array_name: Array to remove element from
+        :param array_key: Key to find the element to remove
+        :param collection_name:
+        :return:
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+
+        collection = self.client[self.db_name][collection_name]
+        response = collection.update_one(primary_key, {'$pull': {array_name: array_key}}).raw_result
+        if response['n']:
+            LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
+            return True
+        LOGGER.warning(f"Could not find anything to remove. "
+                       f"Check key: {primary_key}, array_name: {array_name}, response: {response}")
         return False
 
     def array_append(self, primary_key, array_name, *elements, collection_name=None) -> bool:
@@ -156,6 +179,37 @@ class Database:
             return True
         LOGGER.warning(f"Could not find anything to update. "
                        f"Check key: {primary_key}, array_name: {array_name}, response: {response}")
+        return False
+
+    def move_element(self, primary_key, array_from, element_id, array_to, collection_name=None) -> bool:
+        """
+        Move element from one array to another.
+        Example use case: archive tasks
+
+        :param primary_key: key to find a MongoDB record with array_from
+        :param array_from: name of array from element will be moved
+        :param element_id: id array element to move
+        :param array_to: name of array to which an element will be moved
+        :param collection_name: leave empty to use the default one
+        :return: bool response (success/fail)
+        """
+
+        if not collection_name:
+            collection_name = self.default_collection
+        collection = self.client[self.db_name][collection_name]
+
+        record = collection.find_one(primary_key)
+        element = record[array_from][element_id]
+
+        response = collection.update(primary_key, {
+            "$pull": {array_from: element},
+            "$addToSet": {array_to: element}
+        })
+        if response['n']:
+            LOGGER.info(f"Successfully updated {response['n']} record. Response from mongoDB: {response}")
+            return True
+        LOGGER.warning(f"Could not find anything to move. "
+                       f"Check key: {primary_key}, array_from: {array_from}, array_to: {array_to}, el_id: {element_id}")
         return False
 
 
@@ -218,8 +272,8 @@ class UserDatabase(Database):
 
 class ClassroomDatabase(Database):
     """
-        Handler class for users actions in DB
-        """
+    Handler class for users actions in DB
+    """
 
     _default_file_path = Path(__file__).resolve().parent.parent / "configs" / "database_config.json"
 
@@ -291,11 +345,32 @@ class ClassroomDatabase(Database):
         return self.array_append({"classroom_id": classroom_id}, "tasks",
                                  {"id": task_id, "creator_id": creator_id, **info}, collection_name=None)
 
+    def submit_task(self, student_id, classroom_id, info: dict):
+        """
+        Send student's answer to database
+
+        :param student_id:
+        :param classroom_id:
+        :param info:
+        :return:
+        """
+
+        students_list = self.find_one({"classroom_id": classroom_id})["students"]
+        student_array_id = None
+        for index, student in enumerate(students_list):
+            if student["id"] == student_id:
+                student_array_id = index
+                break
+
+        self.array_remove({"classroom_id": classroom_id}, f"students.{student_array_id}.tasks",
+                          {"task_id": info["task_id"]})
+        self.array_append({"classroom_id": classroom_id}, f"students.{student_array_id}.tasks", info)
+
 
 class DeadlineDatabase(Database):
     """
-        Handler class for users actions in DB
-        """
+    Handler class for users actions in DB
+    """
 
     _default_file_path = Path(__file__).resolve().parent.parent / "configs" / "database_config.json"
 

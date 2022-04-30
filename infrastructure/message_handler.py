@@ -13,7 +13,8 @@ from aiogram import Bot, types
 from aiogram.utils.exceptions import TelegramAPIError
 from aiogram.types import ParseMode
 from aiogram.dispatcher import FSMContext
-from dateutil.parser import parse   # type: ignore
+from dateutil.parser import parse  # type: ignore
+from bson.binary import Binary
 
 from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
 from configs.logger_conf import configure_logger
@@ -21,7 +22,7 @@ from database.database import UserDatabase, ClassroomDatabase, DeadlineDatabase
 from infrastructure.keyboards.inline_keyboards import *
 from infrastructure.keyboards.reply_keyboards import *
 from infrastructure.keyboards.callbacks import *
-from infrastructure.task import Task
+from infrastructure.task import Task, pack_answers
 
 LOGGER = configure_logger(__name__)
 
@@ -252,7 +253,7 @@ class Handler:
             :return:
             """
 
-            _id = chat_id if chat_id else callback_query.from_user.id   # type: ignore
+            _id = chat_id if chat_id else callback_query.from_user.id  # type: ignore
             self._cached_msgs.append((await self.bot.send_message(
                 _id, "Please, enter the name of your first classroom. "
                      "You will be able to create more later. "
@@ -351,11 +352,11 @@ class Handler:
             self._cached_msgs.append(message.message_id)
             # TODO: fill
 
-        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_CLASSROOM_VIEW_TASKS,
-                                           state=UserStatus.STUDENT_GROUPS_ACTIONS)
-        async def student_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
+        @dispatcher.callback_query_handler(lambda callback: callback.data in [CALLBACK_STUDENT_CLASSROOM_VIEW_TASKS,
+                                                                              CALLBACK_TEACHER_CLASSROOM_VIEW_TASKS],
+                                           state=UserStatus.all_states)
+        async def view_tasks_list(callback_query: types.CallbackQuery, state: FSMContext):
             """
-            Submit a task
             Sends custom keyboard with a list of buttons (representing tasks)
             On click - switches to task and asks to send a text/image/file
             :param callback_query:
@@ -418,6 +419,108 @@ class Handler:
                                              callback_query.from_user.id, self.last_msg_id, reply_markup=reply_markup)
             await self.bot.answer_callback_query(callback_query.id)
 
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_DOWNLOAD_TASK_ATTCHMENTS,
+                                           state=UserStatus.all_states)
+        async def download_attachments(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Send selected task attachment to user
+            Available states: UserState.STUDENT_TASK_ACTIONS, UserState.TEACHER_TASK_ACTIONS.
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            await clean_chat(callback_query.from_user.id)
+            async with state.proxy() as data:  # classroom_id, task_id, array_task_id
+                tasks = self.class_db.get_info(data["classroom_id"])["tasks"]
+                selected_task = tasks[data["array_task_id"]]
+                files = {file["filename"]: file["file"] for file in selected_task["files"]}
+
+                for filename, file_bin in files.items():
+                    file_path = Path(get_temp_dir(callback_query.from_user.id) / filename)
+                    with open(file_path, "wb+") as handler:
+                        handler.write(Binary(file_bin))
+                    with open(file_path, "rb") as handler:
+                        await bot.send_document(callback_query.from_user.id, (filename, handler))
+                    os.remove(file_path)
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_SUBMIT_TASK,
+                                           state=UserStatus.STUDENT_TASK_ACTIONS)
+        async def begin_student_submit_task(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Ask student to send task answers (text and/or file) for further processing.
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            self._cached_msgs.append(self.last_msg_id)
+            await clean_chat(callback_query.from_user.id)
+
+            async with state.proxy() as data:
+                await UserStatus.STUDENT_SUBMIT_TASK.set()
+                await state.update_data(data)  # classroom_id, task_id, array_task_id
+            self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
+                                                                  "Please, send me your answer in the following form:\n"
+                                                                  "1. Just text message with answer\n"
+                                                                  "2. Text + file/image (any format - up to 15MB)\n"
+                                                                  "3. Just file/image\n"
+                                                                  "Use the attachment button to send me photos/files.")
+                                      ).message_id)
+
+        @dispatcher.message_handler(content_types=["text", "document", "photo"], state=UserStatus.STUDENT_SUBMIT_TASK)
+        async def handle_student_task(message: types.Message, state: FSMContext):
+            """
+            Get student's answer on selected task
+            :param message:
+            :param state:
+            :return:
+            """
+            user_id = message.chat.id
+            await clean_chat(user_id)
+            self._cached_msgs.append(message.message_id)
+
+            text_answer = message.text
+
+            if message.content_type == "photo":
+                await message.photo[-1].download(destination_dir=get_temp_dir(user_id))
+            elif message.content_type == "document":
+                await message.document.download(destination_dir=get_temp_dir(user_id))
+            # TODO: implement malware scanner
+
+            async with state.proxy() as data:  # classroom_id, task_id, array_task_id
+                task = Task(data["task_id"], data["classroom_id"], self.class_db, self.db, self.deadlines_db)
+                task_files = [file for file in Path(get_temp_dir(user_id)).glob('**/*') if file.is_file()]
+                for file in task_files:
+                    task.add_file(file)
+                    os.remove(str(file))
+                if text_answer:
+                    task.add_text_description(text_answer)
+                task.add_student_answer(user_id)
+                await clean_chat(user_id)
+                await UserStatus.MAIN_MENU.set()
+                self._cached_msgs.append((await self.bot.send_message(user_id,
+                                                                      f"Received and successfully uploaded "
+                                                                      f"{len(task_files)} files and description: "
+                                                                      f"{text_answer}.\nYou will be able to "
+                                                                      f"re-upload your answer any time before "
+                                                                      f"deadline.",
+                                                                      reply_markup=await get_main_menu_markup("student"))
+                                          ).message_id)
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_QUESTION,
+                                           state=UserStatus.all_states)
+        async def student_ask_question(callback_query: types.CallbackQuery, state: FSMContext):  # pylint: disable=unused-argument # noqa
+            """
+            Ask teacher a question.
+            Available states: UserState.STUDENT_TASK_ACTIONS, UserState.STUDENT_GROUPS_ACTIONS
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            pass  # TODO: fill   # pylint: disable=unused-argument, unnecessary-pass
+
         # endregion
 
         # region Teacher: main actions
@@ -471,7 +574,8 @@ class Handler:
 
             if self._user_type == "teacher":
                 await UserStatus.TEACHER_GROUPS_ACTIONS.set()
-                await state.update_data(classroom_id=group_id, teacher_id=callback_query.from_user.id)
+                await state.update_data(classroom_id=group_id, group_name=group_name,
+                                        teacher_id=callback_query.from_user.id)
                 reply_markup = await get_teacher_group_actions_keyboard()
             else:
                 await UserStatus.STUDENT_GROUPS_ACTIONS.set()
@@ -582,7 +686,9 @@ class Handler:
                     await task.send_students(self.bot)
                 self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
                                                                       "Task was successfully sent to students! "
-                                                                      "You'll receive solutions after deadline comes.")
+                                                                      "You'll receive solutions after deadline comes.",
+                                                                      reply_markup=await get_main_menu_markup("teacher")
+                                                                      )
                                           ).message_id)
             else:
                 async with state.proxy() as data:
@@ -591,6 +697,40 @@ class Handler:
                 self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
                                                                       "Task was not sent to students. "
                                                                       "You will be able to send/modify it later "
-                                                                      "in section 'classroom' - 'tasks'.")
+                                                                      "in section 'classroom' - 'tasks'.",
+                                                                      reply_markup=await get_main_menu_markup("teacher"))
                                           ).message_id)
+            await UserStatus.MAIN_MENU.set()
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_GET_TASK_ANSWERS,
+                                           state=UserStatus.TEACHER_TASK_ACTIONS)
+        async def teacher_get_task_answers(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Get students' answers on task any time before deadline.
+            Outputs .zip archive with anonymous answers (with depersonalized ID) and excel manager table for marks
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            await clean_chat(callback_query.from_user.id)
+            async with state.proxy() as data:  # classroom_id, task_id, array_task_id
+                zip_dir_path = Path(get_temp_dir(callback_query.from_user.id)) / "tasks_packed"
+                zip_file = pack_answers(data["classroom_id"], data["task_id"], zip_dir_path, self.class_db)
+                with open(zip_file, "rb") as handler:
+                    self._cached_msgs.append(await self.bot.send_message(callback_query.from_user.id,
+                                                                         "Here is a ZIP-archive with students' answers"
+                                                                         " awailable at this moment. You'll receive "
+                                                                         "the updated version again after deadline. "
+                                                                         "Please, unpack it in single folder and "
+                                                                         "do not rename the excel file. It has links "
+                                                                         "to all students' answers and a mark column.\n"
+                                                                         "After evaluating, please send me this "
+                                                                         "excel file - just by the attachment button "
+                                                                         "from the main menu."))
+                    await self.bot.send_document(callback_query.from_user.id,
+                                                 (f"task_{data['array_task_id']}.zip", handler),
+                                                 reply_markup=await get_main_menu_markup("teacher"))
+            await UserStatus.MAIN_MENU.set()
+
         # endregion
