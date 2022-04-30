@@ -3,6 +3,14 @@ requests
 aiogram
 pymongo
 
+# data processing
+numpy
+pandas
+sklearn
+nltk
+tensorflow==2.8
+keras
+
 # validation
 jsonschema
 
