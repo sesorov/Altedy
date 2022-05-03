@@ -1,3 +1,8 @@
+"""
+Plugin for Altedy Tasks.
+Neural Network handler for automated in-group text plagiarism detection.
+"""
+
 import string
 
 import nltk
@@ -63,7 +68,7 @@ def process_similarity(base_document: str, documents: list, model=None):
     """
 
     if not model:
-        model = f"nn_modules/plagiarism/doc2vec.bin"
+        model = "nn_modules/plagiarism/doc2vec.bin"
 
     model = Doc2Vec.load(model)
 
@@ -80,8 +85,6 @@ def process_similarity(base_document: str, documents: list, model=None):
         tokens = list(filter(lambda x: x in model.wv.vocab.keys(), tokens))
         vector = model.infer_vector(tokens)
         vectors.append(vector)
-
-        print("making vector at index:", i)
 
     scores = cosine_similarity([base_vector], vectors).flatten()
 
