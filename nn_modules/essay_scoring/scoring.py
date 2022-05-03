@@ -71,10 +71,10 @@ def get_vector(words, model, num_features):
 
     vec = np.zeros((num_features,), dtype="float32")
     word_count = 0.
-    index_to_key_set = set(model.index_to_key)
+    index_to_word_set = set(model.wv.index2word)
 
     for i in words:
-        if i in index_to_key_set:
+        if i in index_to_word_set:
             word_count += 1
             vec = np.add(vec, model[i])
     vec = np.divide(vec, word_count)
