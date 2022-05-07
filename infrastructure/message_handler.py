@@ -716,7 +716,7 @@ class Handler:
             await clean_chat(callback_query.from_user.id)
             async with state.proxy() as data:  # classroom_id, task_id, array_task_id
                 zip_dir_path = Path(get_temp_dir(callback_query.from_user.id)) / "tasks_packed"
-                zip_file = pack_answers(data["classroom_id"], data["task_id"], zip_dir_path, self.class_db)
+                zip_file = pack_answers(data["classroom_id"], data["task_id"], zip_dir_path, mail=True)
                 with open(zip_file, "rb") as handler:
                     self._cached_msgs.append(await self.bot.send_message(callback_query.from_user.id,
                                                                          "Here is a ZIP-archive with students' answers"

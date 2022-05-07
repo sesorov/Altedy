@@ -1,5 +1,5 @@
 """
-General class for task actions
+General tools for task actions
 """
 
 import os
@@ -15,6 +15,7 @@ from aiogram import Bot
 from bson.binary import Binary
 
 from common.helper import get_temp_dir
+from common.email_api import send_mail
 from configs.logger_conf import configure_logger
 from database.database import UserDatabase, ClassroomDatabase, DeadlineDatabase
 from infrastructure.keyboards.reply_keyboards import get_main_menu_markup
@@ -125,7 +126,7 @@ async def job_minutely_deadlines(bot: Bot):
             task.archive()
 
 
-def pack_answers(classroom_id, task_id, destination_dir, classroom_db: ClassroomDatabase = None):
+def pack_answers(classroom_id, task_id, destination_dir, mail=True):
     """
     Generates ZIP-archive with structure: <id>/<files>, <id>/<files>, ..., gradebook.xlsx
     gradebook.xlsx is a MANAGER file with all the necessary links and grading column,
@@ -133,20 +134,27 @@ def pack_answers(classroom_id, task_id, destination_dir, classroom_db: Classroom
     :param classroom_id:
     :param task_id:
     :param destination_dir:
-    :param classroom_db:
+    :param mail: bool Whether to send zip to teachers
     :return:
     """
 
-    if not classroom_db:
-        classroom_db = ClassroomDatabase()
+    classroom_db = ClassroomDatabase()
+    users_db = UserDatabase()
+
+    classroom_info = classroom_db.get_info(classroom_id)
 
     students_answers = {}
-    students_tasks = {student["id"]: student["tasks"] for student in classroom_db.get_info(classroom_id)["students"]}
+    task_info = {}
+    students_tasks = {student["id"]: student["tasks"] for student in classroom_info["students"]}
     for student_id, tasks in students_tasks.items():
         for task in tasks:
             if task["task_id"] == task_id:
                 students_answers[student_id] = task
                 break
+    for task in classroom_info["tasks"]:
+        if task["id"] == task_id:
+            task_info = task
+            break
 
     gradebook = xlsxwriter.Workbook(Path(destination_dir) / "temp" / f"gradebook-{task_id}.xlsx")
     worksheet = gradebook.add_worksheet()
@@ -173,6 +181,21 @@ def pack_answers(classroom_id, task_id, destination_dir, classroom_db: Classroom
     archive_path = Path(destination_dir) / f"{task_id}"
     make_archive(str(archive_path), "zip", Path(destination_dir) / "temp")
     rmtree(Path(destination_dir) / "temp")
+
+    # Send email
+    if mail:
+        teachers_emails = []
+        for _id in classroom_info["teachers"]:
+            teacher_email = users_db.get_info(_id).get("email", None)
+            if teacher_email:
+                teachers_emails.append(teacher_email)
+        with open(Path(destination_dir) / f"{task_id}.zip", "rb") as archive:
+            to_send = {"filename": f"{task_id}.zip", "file": archive.read()}
+            send_mail(teachers_emails, f"Group {classroom_info['name']} answers",
+                      "Greetings! The attached archive contains all answers "
+                      f"sent by students on task with the following description:\n{task_info['description']}",
+                      to_send)
+
     return Path(destination_dir) / f"{task_id}.zip"
 
 
