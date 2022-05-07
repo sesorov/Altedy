@@ -244,6 +244,15 @@ class UserDatabase(Database):
 
         return bool(self.find_one({"user_id": user_id}))
 
+    def get_info(self, user_id):
+        """
+        Get user info by ID
+        :param user_id:
+        :return:
+        """
+
+        return self.find_one({"user_id": user_id})
+
     def get_type(self, user_id):
         """
         Get user type: student or teacher
