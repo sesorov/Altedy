@@ -19,12 +19,31 @@ DEFAULT_SCHEMA = {
             "properties": {
                 "TOKEN": {
                     "type": "string",
-                    "minLenght": 46,
-                    "maxLenght": 46
+                    "minLength": 46,
+                    "maxLength": 46
                 },
             },
             "required": ["TOKEN"]
         },
+        "MAIL": {
+            "type": "object",
+            "properties": {
+                "SERVER": {
+                    "type": "string"
+                },
+                "PORT": {
+                    "type": "integer"
+                },
+                "ADDRESS": {
+                    "type": "string",
+                    "minLength": 8
+                },
+                "PASSWORD": {
+                    "type": "string"
+                }
+            },
+            "required": ["SERVER", "PORT", "ADDRESS", "PASSWORD"]
+        }
     },
     "required": ["BOT"]
 }
