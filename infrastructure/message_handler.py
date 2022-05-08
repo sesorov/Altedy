@@ -16,7 +16,7 @@ from aiogram.dispatcher import FSMContext
 from dateutil.parser import parse  # type: ignore
 from bson.binary import Binary
 
-from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir
+from common.helper import UserStatus, VerifyString, get_md5, get_temp_dir, get_plugins
 from configs.logger_conf import configure_logger
 from database.database import UserDatabase, ClassroomDatabase, DeadlineDatabase
 from infrastructure.keyboards.inline_keyboards import *
@@ -73,7 +73,7 @@ class Handler:
             """
             Send a message when the command /help is issued.
             """
-            await self.bot.send_message(message.chat.id, "", reply_markup=(await get_help_keyboard()))
+            await self.bot.send_message(message.chat.id, "Please, click on /start and follow the instructions.")
 
         # endregion
 
@@ -505,12 +505,14 @@ class Handler:
                                                                       f"{text_answer}.\nYou will be able to "
                                                                       f"re-upload your answer any time before "
                                                                       f"deadline.",
-                                                                      reply_markup=await get_main_menu_markup("student"))
+                                                                      reply_markup=await get_main_menu_markup(
+                                                                          "student"))
                                           ).message_id)
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_STUDENT_QUESTION,
                                            state=UserStatus.all_states)
-        async def student_ask_question(callback_query: types.CallbackQuery, state: FSMContext):  # pylint: disable=unused-argument # noqa
+        async def student_ask_question(callback_query: types.CallbackQuery,  # pylint: disable=unused-argument # noqa
+                                       state: FSMContext):  # pylint: disable=unused-argument # noqa
             """
             Ask teacher a question.
             Available states: UserState.STUDENT_TASK_ACTIONS, UserState.STUDENT_GROUPS_ACTIONS
@@ -584,6 +586,70 @@ class Handler:
             await self.bot.edit_message_text(f"Group {group_name} actions:", callback_query.from_user.id,
                                              self.last_msg_id, reply_markup=reply_markup)
             await self.bot.answer_callback_query(callback_query.id)
+
+        @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_SETUP_PLUGINS,
+                                           state=UserStatus.TEACHER_GROUPS_ACTIONS)
+        async def teacher_plugins_view(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Get list of available plugins and enable/denable them
+            Creates message with inline checkbox
+
+            :param state:
+            :param callback_query:
+            :return:
+            """
+
+            await clean_chat(callback_query.from_user.id)
+            async with state.proxy() as data:  # classroom_id, group_name, teacher_id
+                await UserStatus.TEACHER_SETUP_PLUGINS.set()
+                await state.update_data(data)
+
+            classroom_info = self.class_db.get_info(data['classroom_id'])
+            all_plugins = get_plugins()
+            enabled_plugins = data.get("enabled_plugins", None) or classroom_info.get("plugins", [])
+            keyboard = []
+            for module in all_plugins:
+                keyboard.append([{f"{'✔️' if module in enabled_plugins else '❌'} {module}":
+                                  f"{module}:{data['classroom_id']}"}])
+            keyboard.append([{"Save changes": f"save:{data['classroom_id']}"}])
+
+            await state.update_data(enabled_plugins=enabled_plugins)
+
+            await self.bot.edit_message_text("Here's a list of available free plugins (click to select/unselect):",
+                                             callback_query.from_user.id,
+                                             self.last_msg_id, reply_markup=await get_custom_keyboard(keyboard))
+
+        @dispatcher.callback_query_handler(state=UserStatus.TEACHER_SETUP_PLUGINS)
+        async def teacher_plugins_change(callback_query: types.CallbackQuery, state: FSMContext):
+            """
+            Modify plugins checkbox or save changes
+
+            :param callback_query:
+            :param state:
+            :return:
+            """
+
+            module_name, group_id = callback_query.data.split(':')
+
+            async with state.proxy() as data:
+                enabled_plugins = data.get("enabled_plugins", [])
+                if module_name == "save":
+                    self.class_db.update({"classroom_id": group_id}, {"plugins": enabled_plugins})
+                    self._cached_msgs.append(self.last_msg_id)
+                    await clean_chat(callback_query.from_user.id)
+                    self._cached_msgs.append((await self.bot.send_message(callback_query.from_user.id,
+                                                                          "Successfully updated your plugins.",
+                                                                          reply_markup=await get_main_menu_markup(
+                                                                              "teacher")
+                                                                          )
+                                              ).message_id)
+                else:
+                    if module_name in enabled_plugins:
+                        enabled_plugins.remove(module_name)
+                    else:
+                        enabled_plugins.append(module_name)
+                    await state.update_data(enabled_plugins=enabled_plugins)
+                    await teacher_plugins_view(callback_query, state)
 
         @dispatcher.callback_query_handler(lambda callback: callback.data == CALLBACK_CREATE_TASK,
                                            state=UserStatus.TEACHER_GROUPS_ACTIONS)
@@ -698,7 +764,8 @@ class Handler:
                                                                       "Task was not sent to students. "
                                                                       "You will be able to send/modify it later "
                                                                       "in section 'classroom' - 'tasks'.",
-                                                                      reply_markup=await get_main_menu_markup("teacher"))
+                                                                      reply_markup=await get_main_menu_markup(
+                                                                          "teacher"))
                                           ).message_id)
             await UserStatus.MAIN_MENU.set()
 
