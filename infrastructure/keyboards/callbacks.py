@@ -33,3 +33,6 @@ CALLBACK_STUDENT_CLASSROOM_VIEW_TASKS = "callback_student_classroom_view_tasks"
 CALLBACK_STUDENT_CLASSROOM_VIEW_MARKS = "callback_student_classroom_view_marks"
 CALLBACK_STUDENT_CLASSROOM_MATERIALS = "callback_student_classroom_materials"
 CALLBACK_STUDENT_QUESTION = "callback_student_classroom_ask_question"
+
+# Plugins
+CALLBACK_SETUP_PLUGINS = "callback_setup_plugins"

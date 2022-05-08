@@ -2,6 +2,7 @@
 Useful classes, functions, etc.
 """
 
+import os
 import re
 import hashlib
 from enum import Enum
@@ -47,6 +48,7 @@ class UserStatus(StatesGroup):
     TEACHER_CREATE_TASK = State()
     TEACHER_WAIT_TASK_DEADLINE = State()
     TEACHER_SEND_TASK = State()
+    TEACHER_SETUP_PLUGINS = State()
 
 
 class VerifyString(Enum):
@@ -66,3 +68,12 @@ def get_md5(value):
     """
 
     return hashlib.md5(str(value).encode()).hexdigest()  # nosec
+
+
+def get_plugins() -> list:
+    """
+    Get list of plugins presented in nn_modules
+    :return:
+    """
+
+    return next(os.walk(Path(__file__).resolve().parent.parent / "nn_modules"))[1]

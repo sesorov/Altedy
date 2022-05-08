@@ -23,23 +23,6 @@ async def get_custom_keyboard(buttons: list) -> InlineKeyboardMarkup:
     return keyboard
 
 
-async def get_help_keyboard() -> InlineKeyboardMarkup:
-    """
-    Chat help keyboard
-    """
-    keyboard = [
-        [
-            InlineKeyboardButton("Bot guide 1-1", callback_data=''),
-            InlineKeyboardButton("Bot guide 1-2", callback_data='')
-        ],
-        [
-            InlineKeyboardButton("Bot guide 2-1", callback_data=''),
-            InlineKeyboardButton("Bot guide 2-2", callback_data='')
-        ],
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
 async def get_register_keyboard() -> InlineKeyboardMarkup:
     """
     First time registration / signing in
@@ -88,6 +71,7 @@ async def get_teacher_group_actions_keyboard() -> InlineKeyboardMarkup:
     keyboard.add(
         InlineKeyboardButton("Create task", callback_data=CALLBACK_CREATE_TASK),
         InlineKeyboardButton("Active tasks", callback_data=CALLBACK_TEACHER_CLASSROOM_VIEW_TASKS),
+        InlineKeyboardButton("Plugins", callback_data=CALLBACK_SETUP_PLUGINS),
     )
     return keyboard
 
