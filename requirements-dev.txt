@@ -7,3 +7,6 @@ flake8==4.0.1
 
 # static
 mypy==0.942
+
+# other
+types-requests
