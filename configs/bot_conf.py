@@ -43,6 +43,18 @@ DEFAULT_SCHEMA = {
                 }
             },
             "required": ["SERVER", "PORT", "ADDRESS", "PASSWORD"]
+        },
+        "ANTIVIRUS": {
+            "type": "object",
+            "properties": {
+                "API_URL": {
+                    "type": "string"
+                },
+                "API_KEY": {
+                    "type": "string"
+                }
+            },
+            "required": ["API_URL", "API_KEY"]
         }
     },
     "required": ["BOT"]
